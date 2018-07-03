@@ -167,7 +167,8 @@ named!(
 named!(
     command_squit<&str, Command>,
     do_parse!(
-        tag!("SQUIT ") >>
+        tag!("SQUIT") >>
+        tag!(" ") >>
         server: argument_middle >>
         tag!(" ") >>
         comment: argument_last >>
@@ -178,20 +179,21 @@ named!(
 named!(
     command_join<&str, Command>,
     do_parse!(
-        tag!("JOIN ") >>
+        tag!("JOIN") >>
+        tag!(" ") >>
         channels: argument_last >>
         opt!(tag!(" ")) >>
         keys: opt!(argument_last) >>
         (Command::Join { channels: channels.split(",").map(|c| c.to_string()).collect(),
-                         keys: keys.map(|ks| ks.split(",").map(|k| k.to_string()).collect())
-                                   .unwrap_or_else(|| Vec::new())})
+                         keys: keys.unwrap_or_default().split(",").map(|k| k.to_string()).collect()})
     )
 );
 
 named!(
     command_part<&str, Command>,
     do_parse!(
-        tag!("PART ") >>
+        tag!("PART") >>
+        tag!(" ") >>
         channels: argument_last >>
         (Command::Part { channels: channels.split(",").map(|c| c.to_string()).collect() })
     )
@@ -200,7 +202,8 @@ named!(
 named!(
     command_mode<&str, Command>,
     do_parse!(
-        tag!("MODE ") >>
+        tag!("MODE") >>
+        tag!(" ") >>
         target: argument_middle >>
         tag!(" ") >>
         modes: argument_middle >>
@@ -221,7 +224,8 @@ named!(
 named!(
     command_topic<&str, Command>,
     do_parse!(
-        tag!("TOPIC ") >>
+        tag!("TOPIC") >>
+        tag!(" ") >>
         channel: argument_middle >>
         opt!(tag!(" ")) >>
         topic: opt!(argument_last) >>
