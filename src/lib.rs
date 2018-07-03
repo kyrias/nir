@@ -734,14 +734,14 @@ mod tests {
     #[test]
     fn test_whois() {
         assert_eq!(message("WHO kyrias\r\n"),
-        Ok(("", Message { prefix: None, command: Command::Who { name: None, o: Some("kyrias".into()) }})));
+                   Ok(("", Message { prefix: None, command: Command::Who { name: None, o: Some("kyrias".into()) }})));
         assert_eq!(message("WHO kyrias foo\r\n"),
-        Ok(("", Message { prefix: None, command: Command::Who { name: Some("kyrias".into()), o: Some("foo".into()) }})));
+                   Ok(("", Message { prefix: None, command: Command::Who { name: Some("kyrias".into()), o: Some("foo".into()) }})));
         assert_eq!(message("WHOIS kyrias\r\n"),
-        Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into()] }})));
+                   Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into()] }})));
         assert_eq!(message("WHOIS kyrias,demize\r\n"),
-        Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into(), "demize".into()] }})));
+                   Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into(), "demize".into()] }})));
         assert_eq!(message("WHOIS chat.freenode.net kyrias,demize\r\n"),
-        Ok(("", Message { prefix: None, command: Command::Whois { server: Some("chat.freenode.net".into()), nickmasks: vec!["kyrias".into(), "demize".into()] }})));
+                   Ok(("", Message { prefix: None, command: Command::Whois { server: Some("chat.freenode.net".into()), nickmasks: vec!["kyrias".into(), "demize".into()] }})));
     }
 }
