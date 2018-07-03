@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate nom;
 
+
 #[derive(PartialEq, Eq, Debug)]
 pub struct Prefix(String);
 
@@ -14,6 +15,7 @@ named!(
         (Prefix(pre.to_string()))
     )
 );
+
 
 named!(
     argument_middle<&str, &str>,
@@ -76,7 +78,6 @@ pub enum Command {
     Kill { nickname: String, comment: String },
     Ping { server1: String, server2: Option<String> },
     Pong { daemon1: String, daemon2: Option<String> },
-
     Error { message: String },
     Away { message: Option<String> },
     Rehash,
@@ -86,7 +87,6 @@ pub enum Command {
     Wallops { text: String },
     Userhost { nicknames: Vec<String> },
     Ison { nicknames: Vec<String> },
-
 }
 
 named!(
@@ -599,7 +599,6 @@ named!(
         (Command::Ison { nicknames: nicknames.split(" ").map(|n| n.to_string()).collect() })
     )
 );
-
 
 named!(
     command<&str, Command>,
