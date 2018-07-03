@@ -2,6 +2,11 @@
 extern crate nom;
 
 
+fn from_dec(input: &str) -> Result<u8, std::num::ParseIntError> {
+    u8::from_str_radix(input, 10)
+}
+
+
 named!(
     spaces<&str, &str>,
     is_a!(" ")
@@ -44,6 +49,32 @@ named!(
     alt!(
         argument_middle |
         argument_trailing
+    )
+);
+
+named!(
+    argument_middle_u8<&str, u8>,
+    do_parse!(
+        peek!(verify!(take!(1), |val| val != ":")) >>
+        argument: map_res!(is_not!(" \0\r\n"), from_dec) >>
+        (argument)
+    )
+);
+
+named!(
+    argument_trailing_u8<&str, u8>,
+    do_parse!(
+        tag!(":") >>
+        argument: map_res!(take_until_either!("\0\r\n"), from_dec) >>
+        (argument)
+    )
+);
+
+named!(
+    argument_maybe_last_u8<&str, u8>,
+    alt!(
+        argument_middle_u8 |
+        argument_trailing_u8
     )
 );
 
