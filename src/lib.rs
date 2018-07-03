@@ -2,6 +2,12 @@
 extern crate nom;
 
 
+named!(
+    spaces<&str, &str>,
+    is_a!(" ")
+);
+
+
 #[derive(PartialEq, Eq, Debug)]
 pub struct Prefix(String);
 
@@ -91,7 +97,7 @@ named!(
     command_pass<&str, Command>,
     do_parse!(
         tag!("PASS") >>
-        tag!(" ") >>
+        spaces >>
         password: argument_last >>
         (Command::Pass { password: password.to_string() })
     )
@@ -101,9 +107,9 @@ named!(
     command_nick<&str, Command>,
     do_parse!(
         tag!("NICK") >>
-        tag!(" ") >>
+        spaces >>
         nickname: argument_middle >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         hopcount: opt!(argument_last) >>
         (Command::Nick { nickname: nickname.to_string(), hopcount: hopcount.map(|hc| hc.to_string()) })
     )
@@ -113,13 +119,13 @@ named!(
     command_user<&str, Command>,
     do_parse!(
         tag!("USER") >>
-        tag!(" ") >>
+        spaces >>
         username: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         hostname: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         servername: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         realname: argument_last >>
         (Command::User { username: username.to_string(),
                          hostname: hostname.to_string(),
@@ -132,11 +138,11 @@ named!(
     command_server<&str, Command>,
     do_parse!(
         tag!("SERVER") >>
-        tag!(" ") >>
+        spaces >>
         servername: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         hopcount: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         info: argument_last >>
         (Command::Server { servername: servername.to_string(), hopcount: hopcount.to_string(), info: info.to_string() })
     )
@@ -146,9 +152,9 @@ named!(
     command_oper<&str, Command>,
     do_parse!(
         tag!("OPER") >>
-        tag!(" ") >>
+        spaces >>
         user: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         password: argument_last >>
         (Command::Oper { user: user.to_string(), password: password.to_string() })
     )
@@ -158,7 +164,7 @@ named!(
     command_quit<&str, Command>,
     do_parse!(
         tag!("QUIT") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         message: opt!(argument_last) >>
         (Command::Quit { message: message.map(|m| m.to_string()) })
     )
@@ -168,9 +174,9 @@ named!(
     command_squit<&str, Command>,
     do_parse!(
         tag!("SQUIT") >>
-        tag!(" ") >>
+        spaces >>
         server: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         comment: argument_last >>
         (Command::Squit { server: server.to_string(), comment: comment.to_string() })
     )
@@ -180,9 +186,9 @@ named!(
     command_join<&str, Command>,
     do_parse!(
         tag!("JOIN") >>
-        tag!(" ") >>
+        spaces >>
         channels: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         keys: opt!(argument_last) >>
         (Command::Join { channels: channels.split(",").map(|c| c.to_string()).collect(),
                          keys: keys.unwrap_or_default().split(",").map(|k| k.to_string()).collect()})
@@ -193,7 +199,7 @@ named!(
     command_part<&str, Command>,
     do_parse!(
         tag!("PART") >>
-        tag!(" ") >>
+        spaces >>
         channels: argument_last >>
         (Command::Part { channels: channels.split(",").map(|c| c.to_string()).collect() })
     )
@@ -203,15 +209,15 @@ named!(
     command_mode<&str, Command>,
     do_parse!(
         tag!("MODE") >>
-        tag!(" ") >>
+        spaces >>
         target: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         modes: argument_middle >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         limit: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         user: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         banmask: opt!(argument_last) >>
         (Command::Mode { target: target.to_string(),
                          modes: modes.to_string(),
@@ -225,9 +231,9 @@ named!(
     command_topic<&str, Command>,
     do_parse!(
         tag!("TOPIC") >>
-        tag!(" ") >>
+        spaces >>
         channel: argument_middle >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         topic: opt!(argument_last) >>
         (Command::Topic { channel: channel.to_string(), topic: topic.map(|t| t.to_string()) })
     )
@@ -237,7 +243,7 @@ named!(
     command_names<&str, Command>,
     do_parse!(
         tag!("NAMES") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         channels: opt!(argument_last) >>
         (Command::Names { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect() })
     )
@@ -247,9 +253,9 @@ named!(
     command_list<&str, Command>,
     do_parse!(
         tag!("LIST") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         channels: opt!(argument_middle) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::List { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect(),
                          server: server.map(|s| s.to_string()) })
@@ -260,9 +266,9 @@ named!(
     command_invite<&str, Command>,
     do_parse!(
         tag!("INVITE") >>
-        tag!(" ") >>
+        spaces >>
         nickname: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         channel: argument_last >>
         (Command::Invite { nickname: nickname.to_string(), channel: channel.to_string() })
     )
@@ -272,11 +278,11 @@ named!(
     command_kick<&str, Command>,
     do_parse!(
         tag!("KICK") >>
-        tag!(" ") >>
+        spaces >>
         channel: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         user: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         comment: opt!(argument_last) >>
         (Command::Kick { channel: channel.to_string(), user: user.to_string(), comment: comment.map(|c| c.to_string()) })
     )
@@ -286,7 +292,7 @@ named!(
     command_version<&str, Command>,
     do_parse!(
         tag!("VERSION") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Version { server: server.map(|s| s.to_string()) })
     )
@@ -296,9 +302,9 @@ named!(
     command_stats<&str, Command>,
     do_parse!(
         tag!("STATS") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         query: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Stats { query: query.map(|q| q.to_string()), server: server.map(|s| s.to_string()) })
     )
@@ -308,9 +314,9 @@ named!(
     command_links_all_arguments<&str, Command>,
     do_parse!(
         tag!("LINKS") >>
-        tag!(" ") >>
+        spaces >>
         remote_server: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         server_mask: argument_last >>
         (Command::Links { remote_server: Some(remote_server.to_string()), server_mask: Some(server_mask.to_string()) })
     )
@@ -320,7 +326,7 @@ named!(
     command_links_opt_server_mask<&str, Command>,
     do_parse!(
         tag!("LINKS") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server_mask: opt!(argument_last) >>
         (Command::Links { remote_server: None, server_mask: server_mask.map(|s| s.to_string()) })
     )
@@ -338,7 +344,7 @@ named!(
     command_time<&str, Command>,
     do_parse!(
         tag!("TIME") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Time { server: server.map(|s| s.to_string()) })
     )
@@ -348,11 +354,11 @@ named!(
     command_connect<&str, Command>,
     do_parse!(
         tag!("CONNECT") >>
-        tag!(" ") >>
+        spaces >>
         target_server: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         port: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         remote_server: opt!(argument_last) >>
         (Command::Connect { target_server: target_server.to_string(),
                             port: port.map(|p| p.to_string()),
@@ -364,7 +370,7 @@ named!(
     command_trace<&str, Command>,
     do_parse!(
         tag!("TRACE") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Trace { server: server.map(|s| s.to_string()) })
     )
@@ -374,7 +380,7 @@ named!(
     command_admin<&str, Command>,
     do_parse!(
         tag!("ADMIN") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Admin { server: server.map(|s| s.to_string()) })
     )
@@ -384,7 +390,7 @@ named!(
     command_info<&str, Command>,
     do_parse!(
         tag!("INFO") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Info { server: server.map(|s| s.to_string()) })
     )
@@ -394,9 +400,9 @@ named!(
     command_privmsg<&str, Command>,
     do_parse!(
         tag!("PRIVMSG") >>
-        tag!(" ") >>
+        spaces >>
         receivers: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         message: argument_last >>
         (Command::Privmsg { receivers: receivers.split(",").map(|r| r.to_string()).collect(),
                             message: message.to_string() })
@@ -408,7 +414,7 @@ named!(
     do_parse!(
         tag!("NOTICE") >>
         nickname: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         text: argument_last >>
         (Command::Notice { nickname: nickname.to_string(), text: text.to_string() })
     )
@@ -418,11 +424,11 @@ named!(
     command_who<&str, Command>,
     do_parse!(
         tag!("WHO") >>
-        tag!(" ") >>
+        spaces >>
         name: opt!(
             do_parse!(
                 name: argument_last >>
-                tag!(" ") >>
+                spaces >>
                 (name)
             )
         ) >>
@@ -435,11 +441,11 @@ named!(
     command_whois<&str, Command>,
     do_parse!(
         tag!("WHOIS") >>
-        tag!(" ") >>
+        spaces >>
         server: opt!(
             do_parse!(
                 server: argument_middle >>
-                tag!(" ") >>
+                spaces >>
                 (server)
             )
         ) >>
@@ -453,11 +459,11 @@ named!(
     command_whowas<&str, Command>,
     do_parse!(
         tag!("WHOWAS") >>
-        tag!(" ") >>
+        spaces >>
         nickname: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         count: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Whowas { nickname: nickname.to_string(), count: count.map(|c| c.to_string()), server: server.map(|s| s.to_string()) })
     )
@@ -467,9 +473,9 @@ named!(
     command_kill<&str, Command>,
     do_parse!(
         tag!("KILL") >>
-        tag!(" ") >>
+        spaces >>
         nickname: argument_middle >>
-        tag!(" ") >>
+        spaces >>
         comment: argument_last >>
         (Command::Kill { nickname: nickname.to_string(), comment: comment.to_string() })
     )
@@ -479,9 +485,9 @@ named!(
     command_ping<&str, Command>,
     do_parse!(
         tag!("PING") >>
-        tag!(" ") >>
+        spaces >>
         server1: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server2: opt!(argument_last) >>
         (Command::Ping { server1: server1.to_string(), server2: server2.map(|s2| s2.to_string()) })
     )
@@ -491,9 +497,9 @@ named!(
     command_pong<&str, Command>,
     do_parse!(
         tag!("PONG") >>
-        tag!(" ") >>
+        spaces >>
         daemon1: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         daemon2: opt!(argument_last) >>
         (Command::Pong { daemon1: daemon1.to_string(), daemon2: daemon2.map(|s2| s2.to_string()) })
     )
@@ -503,7 +509,7 @@ named!(
     command_error<&str, Command>,
     do_parse!(
         tag!("ERROR") >>
-        tag!(" ") >>
+        spaces >>
         message: argument_last >>
         (Command::Error { message: message.to_string() })
     )
@@ -515,7 +521,7 @@ named!(
         tag!("AWAY") >>
         message: opt!(
             do_parse!(
-                tag!(" ") >>
+                spaces >>
                 message: argument_last >>
                 (message)
             )
@@ -544,9 +550,9 @@ named!(
     command_summon<&str, Command>,
     do_parse!(
         tag!("SUMMON") >>
-        tag!(" ") >>
+        spaces >>
         user: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Summon { user: user.to_string(), server: server.map(|s| s.to_string()) })
     )
@@ -556,7 +562,7 @@ named!(
     command_users<&str, Command>,
     do_parse!(
         tag!("USERS") >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         server: opt!(argument_last) >>
         (Command::Users { server: server.map(|s| s.to_string()) })
     )
@@ -566,7 +572,7 @@ named!(
     command_wallops<&str, Command>,
     do_parse!(
         tag!("WALLOPS") >>
-        tag!(" ") >>
+        spaces >>
         text: argument_last >>
         (Command::Wallops { text: text.to_string() })
     )
@@ -576,15 +582,15 @@ named!(
     command_userhost<&str, Command>,
     do_parse!(
         tag!("USERHOST") >>
-        tag!(" ") >>
+        spaces >>
         nick1: argument_last >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         nick2: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         nick3: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         nick4: opt!(argument_last) >>
-        opt!(tag!(" ")) >>
+        opt!(spaces) >>
         nick5: opt!(argument_last) >>
         (Command::Userhost { nicknames: vec![Some(nick1), nick2, nick3, nick4, nick5].iter().flat_map(|n| n.map(|n| n.to_string())).collect() })
     )
@@ -594,7 +600,7 @@ named!(
     command_ison<&str, Command>,
     do_parse!(
         tag!("ISON") >>
-        tag!(" ") >>
+        spaces >>
         nicknames: take_until_either!("\0\r\n") >>
         (Command::Ison { nicknames: nicknames.split(" ").map(|n| n.to_string()).collect() })
     )
@@ -657,7 +663,7 @@ pub struct Message {
 named!(
     pub message<&str, Message>,
     do_parse!(
-        prefix: opt!(do_parse!(prefix: prefix >> tag!(" ") >> (prefix))) >>
+        prefix: opt!(do_parse!(prefix: prefix >> spaces >> (prefix))) >>
         command: command >>
         tag!("\r\n") >>
         (Message { prefix: prefix, command: command })
