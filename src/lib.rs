@@ -83,9 +83,9 @@ named!(
 #[derive(PartialEq, Eq, Debug)]
 pub enum Command {
     Pass { password: String },
-    Nick { nickname: String, hopcount: Option<String> },
+    Nick { nickname: String, hopcount: Option<u8> },
     User { username: String, hostname: String, servername: String, realname: String },
-    Server { servername: String, hopcount: String, info: String },
+    Server { servername: String, hopcount: u8, info: String },
     Oper { user: String, password: String },
     Quit { message: Option<String> },
     Squit { server: String, comment: String },
@@ -141,8 +141,8 @@ named!(
         spaces >>
         nickname: argument_maybe_last >>
         opt!(spaces) >>
-        hopcount: opt!(argument_maybe_last) >>
-        (Command::Nick { nickname: nickname.to_string(), hopcount: hopcount.map(|hc| hc.to_string()) })
+        hopcount: opt!(argument_maybe_last_u8) >>
+        (Command::Nick { nickname: nickname.to_string(), hopcount: hopcount })
     )
 );
 
@@ -172,10 +172,10 @@ named!(
         spaces >>
         servername: argument_middle >>
         spaces >>
-        hopcount: argument_middle >>
+        hopcount: argument_middle_u8 >>
         spaces >>
         info: argument_maybe_last >>
-        (Command::Server { servername: servername.to_string(), hopcount: hopcount.to_string(), info: info.to_string() })
+        (Command::Server { servername: servername.to_string(), hopcount: hopcount, info: info.to_string() })
     )
 );
 
