@@ -238,6 +238,9 @@ named!(
     )
 );
 
+// TODO: This doesn't actually parse them properly, since the order in practice depends on the
+// order of the modes.  https://tools.ietf.org/html/rfc2812#section-3.2.3
+// I'm really not sure how to parse this properly.
 named!(
     command_mode<&str, Command>,
     do_parse!(
