@@ -239,8 +239,7 @@ named!(
         tag!("NAMES") >>
         opt!(tag!(" ")) >>
         channels: opt!(argument_last) >>
-        (Command::Names { channels: channels.map(|cs| cs.split(",").map(|c| c.to_string()).collect())
-                                            .unwrap_or_else(|| Vec::new()) })
+        (Command::Names { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect() })
     )
 );
 
@@ -252,8 +251,7 @@ named!(
         channels: opt!(argument_middle) >>
         opt!(tag!(" ")) >>
         server: opt!(argument_last) >>
-        (Command::List { channels: channels.map(|cs| cs.split(",").map(|c| c.to_string()).collect())
-                                           .unwrap_or_else(|| Vec::new()),
+        (Command::List { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect(),
                          server: server.map(|s| s.to_string()) })
     )
 );
