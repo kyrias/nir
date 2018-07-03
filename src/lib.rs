@@ -40,7 +40,7 @@ named!(
 );
 
 named!(
-    argument_last<&str, &str>,
+    argument_maybe_last<&str, &str>,
     alt!(
         argument_middle |
         argument_trailing
@@ -98,7 +98,7 @@ named!(
     do_parse!(
         tag!("PASS") >>
         spaces >>
-        password: argument_last >>
+        password: argument_maybe_last >>
         (Command::Pass { password: password.to_string() })
     )
 );
@@ -108,9 +108,9 @@ named!(
     do_parse!(
         tag!("NICK") >>
         spaces >>
-        nickname: argument_middle >>
+        nickname: argument_maybe_last >>
         opt!(spaces) >>
-        hopcount: opt!(argument_last) >>
+        hopcount: opt!(argument_maybe_last) >>
         (Command::Nick { nickname: nickname.to_string(), hopcount: hopcount.map(|hc| hc.to_string()) })
     )
 );
@@ -126,7 +126,7 @@ named!(
         spaces >>
         servername: argument_middle >>
         spaces >>
-        realname: argument_last >>
+        realname: argument_maybe_last >>
         (Command::User { username: username.to_string(),
                          hostname: hostname.to_string(),
                          servername: servername.to_string(),
@@ -143,7 +143,7 @@ named!(
         spaces >>
         hopcount: argument_middle >>
         spaces >>
-        info: argument_last >>
+        info: argument_maybe_last >>
         (Command::Server { servername: servername.to_string(), hopcount: hopcount.to_string(), info: info.to_string() })
     )
 );
@@ -155,7 +155,7 @@ named!(
         spaces >>
         user: argument_middle >>
         spaces >>
-        password: argument_last >>
+        password: argument_maybe_last >>
         (Command::Oper { user: user.to_string(), password: password.to_string() })
     )
 );
@@ -165,7 +165,7 @@ named!(
     do_parse!(
         tag!("QUIT") >>
         opt!(spaces) >>
-        message: opt!(argument_last) >>
+        message: opt!(argument_maybe_last) >>
         (Command::Quit { message: message.map(|m| m.to_string()) })
     )
 );
@@ -177,7 +177,7 @@ named!(
         spaces >>
         server: argument_middle >>
         spaces >>
-        comment: argument_last >>
+        comment: argument_maybe_last >>
         (Command::Squit { server: server.to_string(), comment: comment.to_string() })
     )
 );
@@ -187,9 +187,9 @@ named!(
     do_parse!(
         tag!("JOIN") >>
         spaces >>
-        channels: argument_last >>
+        channels: argument_maybe_last >>
         opt!(spaces) >>
-        keys: opt!(argument_last) >>
+        keys: opt!(argument_maybe_last) >>
         (Command::Join { channels: channels.split(",").map(|c| c.to_string()).collect(),
                          keys: keys.unwrap_or_default().split(",").map(|k| k.to_string()).collect()})
     )
@@ -200,7 +200,7 @@ named!(
     do_parse!(
         tag!("PART") >>
         spaces >>
-        channels: argument_last >>
+        channels: argument_maybe_last >>
         (Command::Part { channels: channels.split(",").map(|c| c.to_string()).collect() })
     )
 );
@@ -214,11 +214,11 @@ named!(
         spaces >>
         modes: argument_middle >>
         opt!(spaces) >>
-        limit: opt!(argument_last) >>
+        limit: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        user: opt!(argument_last) >>
+        user: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        banmask: opt!(argument_last) >>
+        banmask: opt!(argument_maybe_last) >>
         (Command::Mode { target: target.to_string(),
                          modes: modes.to_string(),
                          limit: limit.map(|l| l.to_string()),
@@ -234,7 +234,7 @@ named!(
         spaces >>
         channel: argument_middle >>
         opt!(spaces) >>
-        topic: opt!(argument_last) >>
+        topic: opt!(argument_maybe_last) >>
         (Command::Topic { channel: channel.to_string(), topic: topic.map(|t| t.to_string()) })
     )
 );
@@ -244,7 +244,7 @@ named!(
     do_parse!(
         tag!("NAMES") >>
         opt!(spaces) >>
-        channels: opt!(argument_last) >>
+        channels: opt!(argument_maybe_last) >>
         (Command::Names { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect() })
     )
 );
@@ -256,7 +256,7 @@ named!(
         opt!(spaces) >>
         channels: opt!(argument_middle) >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::List { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect(),
                          server: server.map(|s| s.to_string()) })
     )
@@ -269,7 +269,7 @@ named!(
         spaces >>
         nickname: argument_middle >>
         spaces >>
-        channel: argument_last >>
+        channel: argument_maybe_last >>
         (Command::Invite { nickname: nickname.to_string(), channel: channel.to_string() })
     )
 );
@@ -281,9 +281,9 @@ named!(
         spaces >>
         channel: argument_middle >>
         spaces >>
-        user: argument_last >>
+        user: argument_maybe_last >>
         opt!(spaces) >>
-        comment: opt!(argument_last) >>
+        comment: opt!(argument_maybe_last) >>
         (Command::Kick { channel: channel.to_string(), user: user.to_string(), comment: comment.map(|c| c.to_string()) })
     )
 );
@@ -293,7 +293,7 @@ named!(
     do_parse!(
         tag!("VERSION") >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Version { server: server.map(|s| s.to_string()) })
     )
 );
@@ -303,9 +303,9 @@ named!(
     do_parse!(
         tag!("STATS") >>
         opt!(spaces) >>
-        query: opt!(argument_last) >>
+        query: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Stats { query: query.map(|q| q.to_string()), server: server.map(|s| s.to_string()) })
     )
 );
@@ -317,7 +317,7 @@ named!(
         spaces >>
         remote_server: argument_middle >>
         spaces >>
-        server_mask: argument_last >>
+        server_mask: argument_maybe_last >>
         (Command::Links { remote_server: Some(remote_server.to_string()), server_mask: Some(server_mask.to_string()) })
     )
 );
@@ -327,7 +327,7 @@ named!(
     do_parse!(
         tag!("LINKS") >>
         opt!(spaces) >>
-        server_mask: opt!(argument_last) >>
+        server_mask: opt!(argument_maybe_last) >>
         (Command::Links { remote_server: None, server_mask: server_mask.map(|s| s.to_string()) })
     )
 );
@@ -345,7 +345,7 @@ named!(
     do_parse!(
         tag!("TIME") >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Time { server: server.map(|s| s.to_string()) })
     )
 );
@@ -355,11 +355,11 @@ named!(
     do_parse!(
         tag!("CONNECT") >>
         spaces >>
-        target_server: argument_last >>
+        target_server: argument_maybe_last >>
         opt!(spaces) >>
-        port: opt!(argument_last) >>
+        port: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        remote_server: opt!(argument_last) >>
+        remote_server: opt!(argument_maybe_last) >>
         (Command::Connect { target_server: target_server.to_string(),
                             port: port.map(|p| p.to_string()),
                             remote_server: remote_server.map(|r| r.to_string()) })
@@ -371,7 +371,7 @@ named!(
     do_parse!(
         tag!("TRACE") >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Trace { server: server.map(|s| s.to_string()) })
     )
 );
@@ -381,7 +381,7 @@ named!(
     do_parse!(
         tag!("ADMIN") >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Admin { server: server.map(|s| s.to_string()) })
     )
 );
@@ -391,7 +391,7 @@ named!(
     do_parse!(
         tag!("INFO") >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Info { server: server.map(|s| s.to_string()) })
     )
 );
@@ -403,7 +403,7 @@ named!(
         spaces >>
         receivers: argument_middle >>
         spaces >>
-        message: argument_last >>
+        message: argument_maybe_last >>
         (Command::Privmsg { receivers: receivers.split(",").map(|r| r.to_string()).collect(),
                             message: message.to_string() })
     )
@@ -415,7 +415,7 @@ named!(
         tag!("NOTICE") >>
         nickname: argument_middle >>
         spaces >>
-        text: argument_last >>
+        text: argument_maybe_last >>
         (Command::Notice { nickname: nickname.to_string(), text: text.to_string() })
     )
 );
@@ -427,12 +427,12 @@ named!(
         spaces >>
         name: opt!(
             do_parse!(
-                name: argument_last >>
+                name: argument_maybe_last >>
                 spaces >>
                 (name)
             )
         ) >>
-        o: opt!(argument_last) >>
+        o: opt!(argument_maybe_last) >>
         (Command::Who { name: name.map(|n| n.to_string()), o: o.map(|o| o.to_string()) })
     )
 );
@@ -449,7 +449,7 @@ named!(
                 (server)
             )
         ) >>
-        nickmasks: argument_last >>
+        nickmasks: argument_maybe_last >>
         (Command::Whois { server: server.map(|s| s.to_string()),
                           nickmasks: nickmasks.split(",").map(|n| n.to_string()).collect() })
     )
@@ -460,11 +460,11 @@ named!(
     do_parse!(
         tag!("WHOWAS") >>
         spaces >>
-        nickname: argument_last >>
+        nickname: argument_maybe_last >>
         opt!(spaces) >>
-        count: opt!(argument_last) >>
+        count: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Whowas { nickname: nickname.to_string(), count: count.map(|c| c.to_string()), server: server.map(|s| s.to_string()) })
     )
 );
@@ -476,7 +476,7 @@ named!(
         spaces >>
         nickname: argument_middle >>
         spaces >>
-        comment: argument_last >>
+        comment: argument_maybe_last >>
         (Command::Kill { nickname: nickname.to_string(), comment: comment.to_string() })
     )
 );
@@ -486,9 +486,9 @@ named!(
     do_parse!(
         tag!("PING") >>
         spaces >>
-        server1: argument_last >>
+        server1: argument_maybe_last >>
         opt!(spaces) >>
-        server2: opt!(argument_last) >>
+        server2: opt!(argument_maybe_last) >>
         (Command::Ping { server1: server1.to_string(), server2: server2.map(|s2| s2.to_string()) })
     )
 );
@@ -498,9 +498,9 @@ named!(
     do_parse!(
         tag!("PONG") >>
         spaces >>
-        daemon1: argument_last >>
+        daemon1: argument_maybe_last >>
         opt!(spaces) >>
-        daemon2: opt!(argument_last) >>
+        daemon2: opt!(argument_maybe_last) >>
         (Command::Pong { daemon1: daemon1.to_string(), daemon2: daemon2.map(|s2| s2.to_string()) })
     )
 );
@@ -510,7 +510,7 @@ named!(
     do_parse!(
         tag!("ERROR") >>
         spaces >>
-        message: argument_last >>
+        message: argument_maybe_last >>
         (Command::Error { message: message.to_string() })
     )
 );
@@ -522,7 +522,7 @@ named!(
         message: opt!(
             do_parse!(
                 spaces >>
-                message: argument_last >>
+                message: argument_maybe_last >>
                 (message)
             )
         ) >>
@@ -551,9 +551,9 @@ named!(
     do_parse!(
         tag!("SUMMON") >>
         spaces >>
-        user: argument_last >>
+        user: argument_maybe_last >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Summon { user: user.to_string(), server: server.map(|s| s.to_string()) })
     )
 );
@@ -563,7 +563,7 @@ named!(
     do_parse!(
         tag!("USERS") >>
         opt!(spaces) >>
-        server: opt!(argument_last) >>
+        server: opt!(argument_maybe_last) >>
         (Command::Users { server: server.map(|s| s.to_string()) })
     )
 );
@@ -573,7 +573,7 @@ named!(
     do_parse!(
         tag!("WALLOPS") >>
         spaces >>
-        text: argument_last >>
+        text: argument_maybe_last >>
         (Command::Wallops { text: text.to_string() })
     )
 );
@@ -583,15 +583,15 @@ named!(
     do_parse!(
         tag!("USERHOST") >>
         spaces >>
-        nick1: argument_last >>
+        nick1: argument_maybe_last >>
         opt!(spaces) >>
-        nick2: opt!(argument_last) >>
+        nick2: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        nick3: opt!(argument_last) >>
+        nick3: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        nick4: opt!(argument_last) >>
+        nick4: opt!(argument_maybe_last) >>
         opt!(spaces) >>
-        nick5: opt!(argument_last) >>
+        nick5: opt!(argument_maybe_last) >>
         (Command::Userhost { nicknames: vec![Some(nick1), nick2, nick3, nick4, nick5].iter().flat_map(|n| n.map(|n| n.to_string())).collect() })
     )
 );
