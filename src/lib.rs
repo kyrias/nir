@@ -712,6 +712,128 @@ mod tests {
     use super::*;
 
     #[test]
+    fn pass() {
+        assert_eq!(command_pass("PASS password\r\n"),
+                   Ok(("\r\n", Command::Pass { password: "password".into() })));
+        assert_eq!(command_pass("PASS :password\r\n"),
+                   Ok(("\r\n", Command::Pass { password: "password".into() })));
+
+        assert_eq!(command_pass("PASS  password\r\n"),
+                   Ok(("\r\n", Command::Pass { password: "password".into() })));
+        assert_eq!(command_pass("PASS  :password\r\n"),
+                   Ok(("\r\n", Command::Pass { password: "password".into() })));
+    }
+
+    #[test]
+    fn nick() {
+        assert_eq!(command_nick("NICK nickname\r\n"),
+                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: None })));
+        assert_eq!(command_nick("NICK :nickname\r\n"),
+                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: None })));
+
+        assert_eq!(command_nick("NICK  nickname  42\r\n"),
+                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: Some(42) })));
+        assert_eq!(command_nick("NICK nickname :42\r\n"),
+                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: Some(42) })));
+
+    }
+
+    #[test]
+    fn user() {
+        assert_eq!(command_user("USER user host server real\r\n"),
+                   Ok(("\r\n", Command::User { username: "user".to_string(),
+                                               hostname: "host".to_string(),
+                                               servername: "server".to_string(),
+                                               realname: "real".to_string() })));
+
+        assert_eq!(command_user("USER user  host   server    :real name\r\n"),
+                   Ok(("\r\n", Command::User { username: "user".to_string(),
+                                               hostname: "host".to_string(),
+                                               servername: "server".to_string(),
+                                               realname: "real name".to_string() })));
+    }
+
+    #[test]
+    fn server() {
+        assert_eq!(command_server("SERVER foo 5 something\r\n"),
+                   Ok(("\r\n", Command::Server { servername: "foo".to_string(),
+                                                 hopcount: 5,
+                                                 info: "something".to_string() })));
+        assert_eq!(command_server("SERVER foo    5  :this is some server!\r\n"),
+                   Ok(("\r\n", Command::Server { servername: "foo".to_string(),
+                                                 hopcount: 5,
+                                                 info: "this is some server!".to_string() })));
+    }
+
+    #[test]
+    fn oper() {
+        assert_eq!(command_oper("OPER user pass\r\n"),
+                   Ok(("\r\n", Command::Oper { user: "user".to_string(),
+                                               password: "pass".to_string() })));
+        assert_eq!(command_oper("OPER user  :pass\r\n"),
+                   Ok(("\r\n", Command::Oper { user: "user".to_string(),
+                                               password: "pass".to_string() })));
+    }
+
+    #[test]
+    fn quit() {
+        assert_eq!(command_quit("QUIT\r\n"),
+                   Ok(("\r\n", Command::Quit { message: None })));
+        assert_eq!(command_quit("QUIT bye\r\n"),
+                   Ok(("\r\n", Command::Quit { message: Some("bye".to_string()) })));
+        assert_eq!(command_quit("QUIT  :good bye\r\n"),
+                   Ok(("\r\n", Command::Quit { message: Some("good bye".to_string()) })));
+    }
+
+    #[test]
+    fn squit() {
+        assert_eq!(command_squit("SQUIT server comment\r\n"),
+                   Ok(("\r\n", Command::Squit { server: "server".to_string(),
+                                                comment: "comment".to_string() })));
+        assert_eq!(command_squit("SQUIT server  :comment\r\n"),
+                   Ok(("\r\n", Command::Squit { server: "server".to_string(),
+                                                comment: "comment".to_string() })));
+    }
+
+    #[test]
+    fn join() {
+        assert_eq!(command_join("JOIN #foo\r\n"),
+                   Ok(("\r\n", Command::Join { channels: vec!["#foo".to_string()],
+                                               keys: vec![] })));
+        assert_eq!(command_join("JOIN #foo,#bar\r\n"),
+                   Ok(("\r\n", Command::Join { channels: vec!["#foo".to_string(),
+                                                              "#bar".to_string()],
+                                               keys: vec![] })));
+        assert_eq!(command_join("JOIN #foo,#bar  baz,quux\r\n"),
+                   Ok(("\r\n", Command::Join { channels: vec!["#foo".to_string(),
+                                                              "#bar".to_string()],
+                                               keys: vec!["baz".to_string(),
+                                                          "quux".to_string()] })));
+    }
+
+    #[test]
+    fn part() {
+        assert_eq!(command_part("PART #foo\r\n"),
+                   Ok(("\r\n", Command::Part { channels: vec!["#foo".to_string()] })));
+        assert_eq!(command_part("PART  #foo,#bar\r\n"),
+                   Ok(("\r\n", Command::Part { channels: vec!["#foo".to_string(),
+                                                              "#bar".to_string()] })));
+    }
+
+    #[test]
+    fn topic() {
+        assert_eq!(command_topic("TOPIC #channel\r\n"),
+                   Ok(("\r\n", Command::Topic { channel: "#channel".to_string(),
+                                                topic: None })));
+        assert_eq!(command_topic("TOPIC #channel something\r\n"),
+                   Ok(("\r\n", Command::Topic { channel: "#channel".to_string(),
+                                                topic: Some("something".to_string()) })));
+        assert_eq!(command_topic("TOPIC #channel  :something else\r\n"),
+                   Ok(("\r\n", Command::Topic { channel: "#channel".to_string(),
+                                                topic: Some("something else".to_string()) })));
+    }
+
+    #[test]
     fn test_prefix() {
         assert_eq!(
             prefix(":foo.bar PRIVMSG #baz :quux"),
