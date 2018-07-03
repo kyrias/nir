@@ -24,7 +24,7 @@ named!(
 named!(
     argument_middle<&str, &str>,
     do_parse!(
-        peek!(verify!(nom::anychar, |val:char| val != ':')) >>
+        peek!(verify!(nom::anychar, |val| val != ':')) >>
         argument: is_not!(" \0\r\n") >>
         (argument)
     )
