@@ -222,7 +222,9 @@ named!(
         opt!(spaces) >>
         keys: opt!(argument_maybe_last) >>
         (Command::Join { channels: channels.split(",").map(|c| c.to_string()).collect(),
-                         keys: keys.unwrap_or_default().split(",").map(|k| k.to_string()).collect()})
+                         keys: keys
+                             .map(|ks| ks.split(",").map(|k| k.to_string()).collect())
+                             .unwrap_or_default() })
     )
 );
 
