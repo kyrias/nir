@@ -281,7 +281,8 @@ named!(
         tag!("NAMES") >>
         opt!(spaces) >>
         channels: opt!(argument_maybe_last) >>
-        (Command::Names { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect() })
+        (Command::Names { channels: channels.map(|cs| cs.split(",").map(|c| c.to_string()).collect())
+                                            .unwrap_or_default() })
     )
 );
 
