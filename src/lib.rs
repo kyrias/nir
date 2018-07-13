@@ -2,6 +2,23 @@
 extern crate nom;
 
 
+trait SplitToVec {
+    fn split_to_vec(&self, pattern: &str) -> Vec<String>;
+}
+
+impl<'a> SplitToVec for &'a str {
+    fn split_to_vec(&self, pattern: &str) -> Vec<String> {
+        self.split(pattern).map(|ss| ss.to_string()).collect()
+    }
+}
+
+impl<'a> SplitToVec for Option<&'a str> {
+    fn split_to_vec(&self, pattern: &str) -> Vec<String> {
+        self.map(|s| s.split_to_vec(pattern)).unwrap_or_default()
+    }
+}
+
+
 fn from_dec(input: &str) -> Result<u8, std::num::ParseIntError> {
     u8::from_str_radix(input, 10)
 }
@@ -221,10 +238,8 @@ named!(
         channels: argument_maybe_last >>
         opt!(spaces) >>
         keys: opt!(argument_maybe_last) >>
-        (Command::Join { channels: channels.split(",").map(|c| c.to_string()).collect(),
-                         keys: keys
-                             .map(|ks| ks.split(",").map(|k| k.to_string()).collect())
-                             .unwrap_or_default() })
+        (Command::Join { channels: channels.split_to_vec(","),
+                         keys: keys.split_to_vec(",") })
     )
 );
 
@@ -234,7 +249,7 @@ named!(
         tag!("PART") >>
         spaces >>
         channels: argument_maybe_last >>
-        (Command::Part { channels: channels.split(",").map(|c| c.to_string()).collect() })
+        (Command::Part { channels: channels.split_to_vec(",") })
     )
 );
 
@@ -263,6 +278,7 @@ named!(
     )
 );
 
+
 named!(
     command_topic<&str, Command>,
     do_parse!(
@@ -281,8 +297,7 @@ named!(
         tag!("NAMES") >>
         opt!(spaces) >>
         channels: opt!(argument_maybe_last) >>
-        (Command::Names { channels: channels.map(|cs| cs.split(",").map(|c| c.to_string()).collect())
-                                            .unwrap_or_default() })
+        (Command::Names { channels: channels.split_to_vec(",") })
     )
 );
 
@@ -294,7 +309,7 @@ named!(
         channels: opt!(argument_middle) >>
         opt!(spaces) >>
         server: opt!(argument_maybe_last) >>
-        (Command::List { channels: channels.unwrap_or_default().split(",").map(|c| c.to_string()).collect(),
+        (Command::List { channels: channels.split_to_vec(","),
                          server: server.map(|s| s.to_string()) })
     )
 );
@@ -441,7 +456,7 @@ named!(
         receivers: argument_middle >>
         spaces >>
         message: argument_maybe_last >>
-        (Command::Privmsg { receivers: receivers.split(",").map(|r| r.to_string()).collect(),
+        (Command::Privmsg { receivers: receivers.split_to_vec(","),
                             message: message.to_string() })
     )
 );
@@ -488,7 +503,7 @@ named!(
         ) >>
         nickmasks: argument_maybe_last >>
         (Command::Whois { server: server.map(|s| s.to_string()),
-                          nickmasks: nickmasks.split(",").map(|n| n.to_string()).collect() })
+                          nickmasks: nickmasks.split_to_vec(",") })
     )
 );
 
@@ -639,7 +654,7 @@ named!(
         tag!("ISON") >>
         spaces >>
         nicknames: take_until_either!("\0\r\n") >>
-        (Command::Ison { nicknames: nicknames.split(" ").map(|n| n.to_string()).collect() })
+        (Command::Ison { nicknames: nicknames.split_to_vec(" ") })
     )
 );
 
