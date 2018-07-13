@@ -33,7 +33,7 @@ enum ValueLessChannelMode {
 
 impl ValueLessChannelMode {
     fn parse(input: &str) -> nom::IResult<&str, ValueLessChannelMode> {
-        let (output, c) = nom::anychar(input)?;
+        let (remaining, c) = try_parse!(input, nom::anychar);
         let vlm = match c {
         'o' => ValueLessChannelMode::Op,
         'v' => ValueLessChannelMode::Voice,
@@ -54,7 +54,7 @@ impl ValueLessChannelMode {
         'I' => ValueLessChannelMode::InviteException,
         _ => Err(nom::Err::Error(nom::Context::Code(input, nom::ErrorKind::Custom(1))))?,
         };
-        Ok((output, vlm))
+        Ok((remaining, vlm))
     }
 }
 
@@ -67,25 +67,25 @@ enum ValueLessChannelModeChange {
 
 impl ValueLessChannelModeChange {
     fn partial(input: &str) -> nom::IResult<&str, Vec<ValueLessChannelModeChange>> {
-        let (input, status) = one_of!(input, "+-")?;
+        let (remaining, status) = try_parse!(input, one_of!("+-"));
         match status {
             '+' => {
-                let (input, modes) = many1!(input, ValueLessChannelMode::parse)?;
+                let (remaining, modes) = try_parse!(remaining, many1!(ValueLessChannelMode::parse));
                 let vlmcs = modes.into_iter().map(|m| ValueLessChannelModeChange::Added(m)).collect();
-                Ok((input, vlmcs))
+                Ok((remaining, vlmcs))
             },
             '-' => {
-                let (input, modes) = many1!(input, ValueLessChannelMode::parse)?;
+                let (remaining, modes) = try_parse!(remaining, many1!(ValueLessChannelMode::parse));
                 let vlmcs = modes.into_iter().map(|m| ValueLessChannelModeChange::Removed(m)).collect();
-                Ok((input, vlmcs))
+                Ok((remaining, vlmcs))
             },
             _ => Err(nom::Err::Error(nom::Context::Code(input, nom::ErrorKind::Custom(2))))?,
         }
     }
 
     fn parse(input: &str) -> nom::IResult<&str, Vec<ValueLessChannelModeChange>> {
-        let (input, vlmcs) = many1!(input, ValueLessChannelModeChange::partial)?;
-        Ok((input, vlmcs.into_iter().flat_map(|mcp| mcp).collect()))
+        let (remaining, vlmcs) = try_parse!(input, many1!(ValueLessChannelModeChange::partial));
+        Ok((remaining, vlmcs.into_iter().flat_map(|mcp| mcp).collect()))
     }
 }
 
@@ -128,45 +128,45 @@ impl ChannelMode {
 
         match vlm {
             ValueLessChannelMode::Op => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::Op(arg.to_string())))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::Op(arg.to_string())))
             },
             ValueLessChannelMode::Voice => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::Voice(arg.to_string())))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::Voice(arg.to_string())))
             },
 
             ValueLessChannelMode::InviteOnly => Ok((input, ChannelMode::InviteOnly)),
             ValueLessChannelMode::Moderated => Ok((input, ChannelMode::Moderated)),
             ValueLessChannelMode::NoExternal => Ok((input, ChannelMode::NoExternal)),
             ValueLessChannelMode::Quiet => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::Quiet(arg.to_string())))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::Quiet(arg.to_string())))
             },
             ValueLessChannelMode::Private => Ok((input, ChannelMode::Private)),
             ValueLessChannelMode::Secret => Ok((input, ChannelMode::Secret)),
             ValueLessChannelMode::OpsTopic => Ok((input, ChannelMode::OpsTopic)),
 
             ValueLessChannelMode::Key => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::Key(arg.to_string())))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::Key(arg.to_string())))
             },
             ValueLessChannelMode::Limit => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::Limit(u64::from_str_radix(arg, 10).expect("user limit"))))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::Limit(u64::from_str_radix(arg, 10).expect("user limit"))))
             },
 
             ValueLessChannelMode::Ban => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::Ban(arg.to_string())))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::Ban(arg.to_string())))
             },
             ValueLessChannelMode::BanException => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::BanException(arg.to_string())))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::BanException(arg.to_string())))
             },
             ValueLessChannelMode::InviteException => {
-                let (input, arg) = mode_argument(input)?;
-                Ok((input, ChannelMode::InviteException(arg.to_string())))
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, ChannelMode::InviteException(arg.to_string())))
             },
         }
     }
@@ -183,12 +183,12 @@ impl ChannelModeChange {
     fn from_valueless(input: &str, mcp: ValueLessChannelModeChange) -> nom::IResult<&str, ChannelModeChange> {
         match mcp {
             ValueLessChannelModeChange::Added(mp) => {
-                let (output, m) = ChannelMode::from_valueless(input, mp)?;
-                Ok((output, ChannelModeChange::Added(m)))
+                let (remaining, m) = ChannelMode::from_valueless(input, mp)?;
+                Ok((remaining, ChannelModeChange::Added(m)))
             },
             ValueLessChannelModeChange::Removed(mp) => {
-                let (output, m) = ChannelMode::from_valueless(input, mp)?;
-                Ok((output, ChannelModeChange::Removed(m)))
+                let (remaining, m) = ChannelMode::from_valueless(input, mp)?;
+                Ok((remaining, ChannelModeChange::Removed(m)))
             },
         }
     }
@@ -196,12 +196,12 @@ impl ChannelModeChange {
 
 pub(crate) fn channel_modes(input: &str) -> nom::IResult<&str, Vec<ChannelModeChange>> {
     let mut output = Vec::new();
-    let (mut input, mcps) = ValueLessChannelModeChange::parse(input)?;
+    let (mut remaining, mcps) = ValueLessChannelModeChange::parse(input)?;
     for mcp in mcps {
-        let res = ChannelModeChange::from_valueless(input, mcp);
+        let res = ChannelModeChange::from_valueless(remaining, mcp);
         let res = res?;
-        input = res.0;
+        remaining = res.0;
         output.push(res.1);
     }
-    Ok((input, output))
+    Ok((remaining, output))
 }
