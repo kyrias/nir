@@ -3,71 +3,85 @@ extern crate nom;
 
 mod modes;
 
-pub use modes::{ChannelMode, ChannelModeChange};
 use modes::channel_modes;
-
+pub use modes::{ChannelMode, ChannelModeChange};
 
 trait SplitToVec {
-    fn split_to_vec(&self, pattern: &str) -> Vec<String>;
+    type Pattern;
+
+    fn split_to_vec(&self, pattern: Self::Pattern) -> Vec<String>;
 }
 
-impl<'a> SplitToVec for &'a str {
-    fn split_to_vec(&self, pattern: &str) -> Vec<String> {
-        self.split(pattern).map(|ss| ss.to_string()).collect()
+impl<'a> SplitToVec for &'a [u8] {
+    type Pattern = &'a [u8];
+
+    fn split_to_vec(&self, pattern: &[u8]) -> Vec<String> {
+        self.split(|b| pattern.contains(b))
+            .map(|s| String::from_utf8_lossy(&s).into_owned())
+            .collect()
     }
 }
 
-impl<'a> SplitToVec for Option<&'a str> {
+impl SplitToVec for String {
+    type Pattern = &'static str;
+
     fn split_to_vec(&self, pattern: &str) -> Vec<String> {
-        self.map(|s| s.split_to_vec(pattern)).unwrap_or_default()
+        self.split(pattern).map(|s| s.to_owned()).collect()
     }
 }
 
+impl<T> SplitToVec for Option<T>
+where
+    T: SplitToVec + Clone,
+{
+    type Pattern = <T as SplitToVec>::Pattern;
 
-fn from_dec(input: &str) -> Result<u8, std::num::ParseIntError> {
-    u8::from_str_radix(input, 10)
+    fn split_to_vec(&self, pattern: Self::Pattern) -> Vec<String> {
+        self.clone()
+            .map(|inner| inner.split_to_vec(pattern))
+            .unwrap_or_default()
+    }
 }
 
+fn from_dec(input: String) -> Result<u8, std::num::ParseIntError> {
+    u8::from_str_radix(&input, 10)
+}
 
 named!(
-    spaces<&str, &str>,
-    is_a!(" ")
+    spaces<&[u8], &[u8]>,
+    is_a!(b" ")
 );
-
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Prefix(String);
 
-named!(
-    prefix<&str, Prefix>,
-    do_parse!(
-        tag!(":") >>
-        pre: is_not!(" ") >>
-        (Prefix(pre.to_string()))
-    )
-);
-
+fn prefix(input: &[u8]) -> nom::IResult<&[u8], Prefix> {
+    let (rest, _) = try_parse!(input, tag!(":"));
+    let (rest, prefix) = try_parse!(rest, is_not!(" "));
+    let prefix = String::from_utf8_lossy(prefix).into_owned();
+    Ok((rest, Prefix(prefix)))
+}
 
 named!(
-    argument_middle<&str, &str>,
+    argument_middle<&[u8], String>,
     do_parse!(
         peek!(verify!(nom::anychar, |val| val != ':')) >>
-        argument: is_not!(" \0\r\n") >>
-        (argument)
+        argument: is_not!(b" \0\r\n") >>
+        (String::from_utf8_lossy(argument).into_owned())
     )
 );
 
 named!(
-    argument_trailing<&str, &str>,
+    argument_trailing<&[u8], String>,
     do_parse!(
-        tag!(":") >>
-        argument: take_until_either!("\0\r\n") >>
-        (argument)
+        tag!(b":") >>
+        argument: take_until_either!(b"\0\r\n") >>
+        (String::from_utf8_lossy(argument).into_owned())
     )
 );
 
 named!(
-    argument_maybe_last<&str, &str>,
+    argument_maybe_last<&[u8], String>,
     alt!(
         argument_middle |
         argument_trailing
@@ -75,81 +89,183 @@ named!(
 );
 
 named!(
-    argument_middle_u8<&str, u8>,
+    argument_middle_u8<&[u8], u8>,
     do_parse!(
-        peek!(verify!(take!(1), |val| val != ":")) >>
-        argument: map_res!(is_not!(" \0\r\n"), from_dec) >>
+        argument: map_res!(argument_middle, from_dec) >>
         (argument)
     )
 );
 
 named!(
-    argument_trailing_u8<&str, u8>,
+    argument_trailing_u8<&[u8], u8>,
     do_parse!(
-        tag!(":") >>
-        argument: map_res!(take_until_either!("\0\r\n"), from_dec) >>
+        argument: map_res!(argument_trailing, from_dec) >>
         (argument)
     )
 );
 
 named!(
-    argument_maybe_last_u8<&str, u8>,
+    argument_maybe_last_u8<&[u8], u8>,
     alt!(
         argument_middle_u8 |
         argument_trailing_u8
     )
 );
 
-
 // Command parsers
 #[derive(PartialEq, Eq, Debug)]
 pub enum Command {
-    Pass { password: String },
-    Nick { nickname: String, hopcount: Option<u8> },
-    User { username: String, hostname: String, servername: String, realname: String },
-    Server { servername: String, hopcount: u8, info: String },
-    Oper { user: String, password: String },
-    Quit { message: Option<String> },
-    Squit { server: String, comment: String },
-    Join { channels: Vec<String>, keys: Vec<String> },
-    Part { channels: Vec<String> },
-    Mode { target: String, modechanges: Option<Vec<ChannelModeChange>> },
-    Topic { channel: String, topic: Option<String> },
-    Names { channels: Vec<String> },
-    List { channels: Vec<String>, server: Option<String> },
-    Invite { nickname: String, channel: String },
-    Kick { channel: String, user: String, comment: Option<String> },
-    Version { server: Option<String> },
-    Stats { query: Option<String>, server: Option<String> },
-    Links { remote_server: Option<String>, server_mask: Option<String> },
-    Time { server: Option<String> },
-    Connect { target_server: String, port: Option<String>, remote_server: Option<String> },
-    Trace { server: Option<String> },
-    Admin { server: Option<String> },
-    Info { server: Option<String> },
-    Privmsg { receivers: Vec<String>, message: String },
-    Notice { nickname: String, text: String },
-    Who { name: Option<String>, o: Option<String> },
-    Whois { server: Option<String>, nickmasks: Vec<String> },
-    Whowas { nickname: String, count: Option<String>, server: Option<String> },
-    Kill { nickname: String, comment: String },
-    Ping { server1: String, server2: Option<String> },
-    Pong { daemon1: String, daemon2: Option<String> },
-    Error { message: String },
-    Away { message: Option<String> },
+    Pass {
+        password: String,
+    },
+    Nick {
+        nickname: String,
+        hopcount: Option<u8>,
+    },
+    User {
+        username: String,
+        hostname: String,
+        servername: String,
+        realname: String,
+    },
+    Server {
+        servername: String,
+        hopcount: u8,
+        info: String,
+    },
+    Oper {
+        user: String,
+        password: String,
+    },
+    Quit {
+        message: Option<String>,
+    },
+    Squit {
+        server: String,
+        comment: String,
+    },
+    Join {
+        channels: Vec<String>,
+        keys: Vec<String>,
+    },
+    Part {
+        channels: Vec<String>,
+    },
+    Mode {
+        target: String,
+        modechanges: Option<Vec<ChannelModeChange>>,
+    },
+    Topic {
+        channel: String,
+        topic: Option<String>,
+    },
+    Names {
+        channels: Vec<String>,
+    },
+    List {
+        channels: Vec<String>,
+        server: Option<String>,
+    },
+    Invite {
+        nickname: String,
+        channel: String,
+    },
+    Kick {
+        channel: String,
+        user: String,
+        comment: Option<String>,
+    },
+    Version {
+        server: Option<String>,
+    },
+    Stats {
+        query: Option<String>,
+        server: Option<String>,
+    },
+    Links {
+        remote_server: Option<String>,
+        server_mask: Option<String>,
+    },
+    Time {
+        server: Option<String>,
+    },
+    Connect {
+        target_server: String,
+        port: Option<String>,
+        remote_server: Option<String>,
+    },
+    Trace {
+        server: Option<String>,
+    },
+    Admin {
+        server: Option<String>,
+    },
+    Info {
+        server: Option<String>,
+    },
+    Privmsg {
+        receivers: Vec<String>,
+        message: String,
+    },
+    Notice {
+        nickname: String,
+        text: String,
+    },
+    Who {
+        name: Option<String>,
+        o: Option<String>,
+    },
+    Whois {
+        server: Option<String>,
+        nickmasks: Vec<String>,
+    },
+    Whowas {
+        nickname: String,
+        count: Option<String>,
+        server: Option<String>,
+    },
+    Kill {
+        nickname: String,
+        comment: String,
+    },
+    Ping {
+        server1: String,
+        server2: Option<String>,
+    },
+    Pong {
+        daemon1: String,
+        daemon2: Option<String>,
+    },
+    Error {
+        message: String,
+    },
+    Away {
+        message: Option<String>,
+    },
     Rehash,
     Restart,
-    Summon { user: String, server: Option<String> },
-    Users { server: Option<String> },
-    Wallops { text: String },
-    Userhost { nicknames: Vec<String> },
-    Ison { nicknames: Vec<String> },
+    Summon {
+        user: String,
+        server: Option<String>,
+    },
+    Users {
+        server: Option<String>,
+    },
+    Wallops {
+        text: String,
+    },
+    Userhost {
+        nicknames: Vec<String>,
+    },
+    Ison {
+        nicknames: Vec<String>,
+    },
 }
 
 named!(
-    command_pass<&str, Command>,
+    command_pass<&[u8], Command>,
     do_parse!(
-        tag!("PASS") >>
+        tag!(b"PASS") >>
         spaces >>
         password: argument_maybe_last >>
         (Command::Pass { password: password.to_string() })
@@ -157,9 +273,9 @@ named!(
 );
 
 named!(
-    command_nick<&str, Command>,
+    command_nick<&[u8], Command>,
     do_parse!(
-        tag!("NICK") >>
+        tag!(b"NICK") >>
         spaces >>
         nickname: argument_maybe_last >>
         opt!(spaces) >>
@@ -169,9 +285,9 @@ named!(
 );
 
 named!(
-    command_user<&str, Command>,
+    command_user<&[u8], Command>,
     do_parse!(
-        tag!("USER") >>
+        tag!(b"USER") >>
         spaces >>
         username: argument_middle >>
         spaces >>
@@ -188,9 +304,9 @@ named!(
 );
 
 named!(
-    command_server<&str, Command>,
+    command_server<&[u8], Command>,
     do_parse!(
-        tag!("SERVER") >>
+        tag!(b"SERVER") >>
         spaces >>
         servername: argument_middle >>
         spaces >>
@@ -202,9 +318,9 @@ named!(
 );
 
 named!(
-    command_oper<&str, Command>,
+    command_oper<&[u8], Command>,
     do_parse!(
-        tag!("OPER") >>
+        tag!(b"OPER") >>
         spaces >>
         user: argument_middle >>
         spaces >>
@@ -214,9 +330,9 @@ named!(
 );
 
 named!(
-    command_quit<&str, Command>,
+    command_quit<&[u8], Command>,
     do_parse!(
-        tag!("QUIT") >>
+        tag!(b"QUIT") >>
         opt!(spaces) >>
         message: opt!(argument_maybe_last) >>
         (Command::Quit { message: message.map(|m| m.to_string()) })
@@ -224,9 +340,9 @@ named!(
 );
 
 named!(
-    command_squit<&str, Command>,
+    command_squit<&[u8], Command>,
     do_parse!(
-        tag!("SQUIT") >>
+        tag!(b"SQUIT") >>
         spaces >>
         server: argument_middle >>
         spaces >>
@@ -236,9 +352,9 @@ named!(
 );
 
 named!(
-    command_join<&str, Command>,
+    command_join<&[u8], Command>,
     do_parse!(
-        tag!("JOIN") >>
+        tag!(b"JOIN") >>
         spaces >>
         channels: argument_maybe_last >>
         opt!(spaces) >>
@@ -249,41 +365,39 @@ named!(
 );
 
 named!(
-    command_part<&str, Command>,
+    command_part<&[u8], Command>,
     do_parse!(
-        tag!("PART") >>
+        tag!(b"PART") >>
         spaces >>
         channels: argument_maybe_last >>
         (Command::Part { channels: channels.split_to_vec(",") })
     )
 );
 
-
-named!(channel_mode<&str, Command>,
+named!(channel_mode<&[u8], Command>,
     do_parse!(
         target: argument_maybe_last >>
         spaces >>
         modechanges: opt!(channel_modes) >>
-        (Command::Mode { target: target.to_string(),
+        (Command::Mode { target: target,
                          modechanges: modechanges })
     )
 );
 
 named!(
-    command_mode<&str, Command>,
+    command_mode<&[u8], Command>,
     do_parse!(
-        tag!("MODE") >>
+        tag!(b"MODE") >>
         spaces >>
         modes: channel_mode >>
         (modes)
     )
 );
 
-
 named!(
-    command_topic<&str, Command>,
+    command_topic<&[u8], Command>,
     do_parse!(
-        tag!("TOPIC") >>
+        tag!(b"TOPIC") >>
         spaces >>
         channel: argument_middle >>
         opt!(spaces) >>
@@ -293,9 +407,9 @@ named!(
 );
 
 named!(
-    command_names<&str, Command>,
+    command_names<&[u8], Command>,
     do_parse!(
-        tag!("NAMES") >>
+        tag!(b"NAMES") >>
         opt!(spaces) >>
         channels: opt!(argument_maybe_last) >>
         (Command::Names { channels: channels.split_to_vec(",") })
@@ -303,9 +417,9 @@ named!(
 );
 
 named!(
-    command_list<&str, Command>,
+    command_list<&[u8], Command>,
     do_parse!(
-        tag!("LIST") >>
+        tag!(b"LIST") >>
         opt!(spaces) >>
         channels: opt!(argument_middle) >>
         opt!(spaces) >>
@@ -316,9 +430,9 @@ named!(
 );
 
 named!(
-    command_invite<&str, Command>,
+    command_invite<&[u8], Command>,
     do_parse!(
-        tag!("INVITE") >>
+        tag!(b"INVITE") >>
         spaces >>
         nickname: argument_middle >>
         spaces >>
@@ -328,9 +442,9 @@ named!(
 );
 
 named!(
-    command_kick<&str, Command>,
+    command_kick<&[u8], Command>,
     do_parse!(
-        tag!("KICK") >>
+        tag!(b"KICK") >>
         spaces >>
         channel: argument_middle >>
         spaces >>
@@ -342,9 +456,9 @@ named!(
 );
 
 named!(
-    command_version<&str, Command>,
+    command_version<&[u8], Command>,
     do_parse!(
-        tag!("VERSION") >>
+        tag!(b"VERSION") >>
         opt!(spaces) >>
         server: opt!(argument_maybe_last) >>
         (Command::Version { server: server.map(|s| s.to_string()) })
@@ -352,9 +466,9 @@ named!(
 );
 
 named!(
-    command_stats<&str, Command>,
+    command_stats<&[u8], Command>,
     do_parse!(
-        tag!("STATS") >>
+        tag!(b"STATS") >>
         opt!(spaces) >>
         query: opt!(argument_maybe_last) >>
         opt!(spaces) >>
@@ -364,9 +478,9 @@ named!(
 );
 
 named!(
-    command_links_all_arguments<&str, Command>,
+    command_links_all_arguments<&[u8], Command>,
     do_parse!(
-        tag!("LINKS") >>
+        tag!(b"LINKS") >>
         spaces >>
         remote_server: argument_middle >>
         spaces >>
@@ -376,9 +490,9 @@ named!(
 );
 
 named!(
-    command_links_opt_server_mask<&str, Command>,
+    command_links_opt_server_mask<&[u8], Command>,
     do_parse!(
-        tag!("LINKS") >>
+        tag!(b"LINKS") >>
         opt!(spaces) >>
         server_mask: opt!(argument_maybe_last) >>
         (Command::Links { remote_server: None, server_mask: server_mask.map(|s| s.to_string()) })
@@ -386,7 +500,7 @@ named!(
 );
 
 named!(
-    command_links<&str, Command>,
+    command_links<&[u8], Command>,
     alt!(
         command_links_all_arguments |
         command_links_opt_server_mask
@@ -394,9 +508,9 @@ named!(
 );
 
 named!(
-    command_time<&str, Command>,
+    command_time<&[u8], Command>,
     do_parse!(
-        tag!("TIME") >>
+        tag!(b"TIME") >>
         opt!(spaces) >>
         server: opt!(argument_maybe_last) >>
         (Command::Time { server: server.map(|s| s.to_string()) })
@@ -404,9 +518,9 @@ named!(
 );
 
 named!(
-    command_connect<&str, Command>,
+    command_connect<&[u8], Command>,
     do_parse!(
-        tag!("CONNECT") >>
+        tag!(b"CONNECT") >>
         spaces >>
         target_server: argument_maybe_last >>
         opt!(spaces) >>
@@ -420,9 +534,9 @@ named!(
 );
 
 named!(
-    command_trace<&str, Command>,
+    command_trace<&[u8], Command>,
     do_parse!(
-        tag!("TRACE") >>
+        tag!(b"TRACE") >>
         opt!(spaces) >>
         server: opt!(argument_maybe_last) >>
         (Command::Trace { server: server.map(|s| s.to_string()) })
@@ -430,9 +544,9 @@ named!(
 );
 
 named!(
-    command_admin<&str, Command>,
+    command_admin<&[u8], Command>,
     do_parse!(
-        tag!("ADMIN") >>
+        tag!(b"ADMIN") >>
         opt!(spaces) >>
         server: opt!(argument_maybe_last) >>
         (Command::Admin { server: server.map(|s| s.to_string()) })
@@ -440,9 +554,9 @@ named!(
 );
 
 named!(
-    command_info<&str, Command>,
+    command_info<&[u8], Command>,
     do_parse!(
-        tag!("INFO") >>
+        tag!(b"INFO") >>
         opt!(spaces) >>
         server: opt!(argument_maybe_last) >>
         (Command::Info { server: server.map(|s| s.to_string()) })
@@ -450,9 +564,9 @@ named!(
 );
 
 named!(
-    command_privmsg<&str, Command>,
+    command_privmsg<&[u8], Command>,
     do_parse!(
-        tag!("PRIVMSG") >>
+        tag!(b"PRIVMSG") >>
         spaces >>
         receivers: argument_middle >>
         spaces >>
@@ -463,9 +577,9 @@ named!(
 );
 
 named!(
-    command_notice<&str, Command>,
+    command_notice<&[u8], Command>,
     do_parse!(
-        tag!("NOTICE") >>
+        tag!(b"NOTICE") >>
         nickname: argument_middle >>
         spaces >>
         text: argument_maybe_last >>
@@ -474,9 +588,9 @@ named!(
 );
 
 named!(
-    command_who<&str, Command>,
+    command_who<&[u8], Command>,
     do_parse!(
-        tag!("WHO") >>
+        tag!(b"WHO") >>
         spaces >>
         name: opt!(
             do_parse!(
@@ -491,9 +605,9 @@ named!(
 );
 
 named!(
-    command_whois<&str, Command>,
+    command_whois<&[u8], Command>,
     do_parse!(
-        tag!("WHOIS") >>
+        tag!(b"WHOIS") >>
         spaces >>
         server: opt!(
             do_parse!(
@@ -509,9 +623,9 @@ named!(
 );
 
 named!(
-    command_whowas<&str, Command>,
+    command_whowas<&[u8], Command>,
     do_parse!(
-        tag!("WHOWAS") >>
+        tag!(b"WHOWAS") >>
         spaces >>
         nickname: argument_maybe_last >>
         opt!(spaces) >>
@@ -523,9 +637,9 @@ named!(
 );
 
 named!(
-    command_kill<&str, Command>,
+    command_kill<&[u8], Command>,
     do_parse!(
-        tag!("KILL") >>
+        tag!(b"KILL") >>
         spaces >>
         nickname: argument_middle >>
         spaces >>
@@ -535,9 +649,9 @@ named!(
 );
 
 named!(
-    command_ping<&str, Command>,
+    command_ping<&[u8], Command>,
     do_parse!(
-        tag!("PING") >>
+        tag!(b"PING") >>
         spaces >>
         server1: argument_maybe_last >>
         opt!(spaces) >>
@@ -547,9 +661,9 @@ named!(
 );
 
 named!(
-    command_pong<&str, Command>,
+    command_pong<&[u8], Command>,
     do_parse!(
-        tag!("PONG") >>
+        tag!(b"PONG") >>
         spaces >>
         daemon1: argument_maybe_last >>
         opt!(spaces) >>
@@ -559,9 +673,9 @@ named!(
 );
 
 named!(
-    command_error<&str, Command>,
+    command_error<&[u8], Command>,
     do_parse!(
-        tag!("ERROR") >>
+        tag!(b"ERROR") >>
         spaces >>
         message: argument_maybe_last >>
         (Command::Error { message: message.to_string() })
@@ -569,9 +683,9 @@ named!(
 );
 
 named!(
-    command_away<&str, Command>,
+    command_away<&[u8], Command>,
     do_parse!(
-        tag!("AWAY") >>
+        tag!(b"AWAY") >>
         message: opt!(
             do_parse!(
                 spaces >>
@@ -584,25 +698,25 @@ named!(
 );
 
 named!(
-    command_rehash<&str, Command>,
+    command_rehash<&[u8], Command>,
     do_parse!(
-        tag!("REHASH") >>
+        tag!(b"REHASH") >>
         (Command::Rehash)
     )
 );
 
 named!(
-    command_restart<&str, Command>,
+    command_restart<&[u8], Command>,
     do_parse!(
-        tag!("RESTART") >>
+        tag!(b"RESTART") >>
         (Command::Restart)
     )
 );
 
 named!(
-    command_summon<&str, Command>,
+    command_summon<&[u8], Command>,
     do_parse!(
-        tag!("SUMMON") >>
+        tag!(b"SUMMON") >>
         spaces >>
         user: argument_maybe_last >>
         opt!(spaces) >>
@@ -612,9 +726,9 @@ named!(
 );
 
 named!(
-    command_users<&str, Command>,
+    command_users<&[u8], Command>,
     do_parse!(
-        tag!("USERS") >>
+        tag!(b"USERS") >>
         opt!(spaces) >>
         server: opt!(argument_maybe_last) >>
         (Command::Users { server: server.map(|s| s.to_string()) })
@@ -622,9 +736,9 @@ named!(
 );
 
 named!(
-    command_wallops<&str, Command>,
+    command_wallops<&[u8], Command>,
     do_parse!(
-        tag!("WALLOPS") >>
+        tag!(b"WALLOPS") >>
         spaces >>
         text: argument_maybe_last >>
         (Command::Wallops { text: text.to_string() })
@@ -632,9 +746,9 @@ named!(
 );
 
 named!(
-    command_userhost<&str, Command>,
+    command_userhost<&[u8], Command>,
     do_parse!(
-        tag!("USERHOST") >>
+        tag!(b"USERHOST") >>
         spaces >>
         nick1: argument_maybe_last >>
         opt!(spaces) >>
@@ -645,84 +759,86 @@ named!(
         nick4: opt!(argument_maybe_last) >>
         opt!(spaces) >>
         nick5: opt!(argument_maybe_last) >>
-        (Command::Userhost { nicknames: vec![Some(nick1), nick2, nick3, nick4, nick5].iter().flat_map(|n| n.map(|n| n.to_string())).collect() })
+        (Command::Userhost {
+            nicknames: vec![Some(nick1), nick2, nick3, nick4, nick5]
+                .iter()
+                .flat_map(|n| n.clone())
+                .collect() })
     )
 );
 
 named!(
-    command_ison<&str, Command>,
+    command_ison<&[u8], Command>,
     do_parse!(
-        tag!("ISON") >>
+        tag!(b"ISON") >>
         spaces >>
-        nicknames: take_until_either!("\0\r\n") >>
-        (Command::Ison { nicknames: nicknames.split_to_vec(" ") })
+        nicknames: take_until_either!(b"\0\r\n") >>
+        (Command::Ison { nicknames: nicknames.split_to_vec(b" ") })
     )
 );
 
 named!(
-    command<&str, Command>,
+    command<&[u8], Command>,
     switch!(
-        peek!(is_not!(" \r")),
-        "PASS" => call!(command_pass) |
-        "NICK" => call!(command_nick) |
-        "USER" => call!(command_user) |
-        "SERVER" => call!(command_server) |
-        "OPER" => call!(command_oper) |
-        "QUIT" => call!(command_quit) |
-        "SQUIT" => call!(command_squit) |
-        "JOIN" => call!(command_join) |
-        "PART" => call!(command_part) |
-        "MODE" => call!(command_mode) |
-        "TOPIC" => call!(command_topic) |
-        "NAMES" => call!(command_names) |
-        "LIST" => call!(command_list) |
-        "INVITE" => call!(command_invite) |
-        "KICK" => call!(command_kick) |
-        "VERSION" => call!(command_version) |
-        "STATS" => call!(command_stats) |
-        "LINKS" => call!(command_links) |
-        "TIME" => call!(command_time) |
-        "CONNECT" => call!(command_connect) |
-        "TRACE" => call!(command_trace) |
-        "ADMIN" => call!(command_admin) |
-        "INFO" => call!(command_info) |
-        "PRIVMSG" => call!(command_privmsg) |
-        "NOTICE" => call!(command_notice) |
-        "WHO" => call!(command_who) |
-        "WHOIS" => call!(command_whois) |
-        "WHOWAS" => call!(command_whowas) |
-        "KILL" => call!(command_kill) |
-        "PING" => call!(command_ping) |
-        "PONG" => call!(command_pong) |
-        "ERROR" => call!(command_error) |
-        "AWAY" => call!(command_away) |
-        "REHASH" => call!(command_rehash) |
-        "RESTART" => call!(command_restart) |
-        "SUMMON" => call!(command_summon) |
-        "USERS" => call!(command_users) |
-        "WALLOPS" => call!(command_wallops) |
-        "USERHOST" => call!(command_userhost) |
-        "ISON" => call!(command_ison)
+        peek!(is_not!(b" \r")),
+        b"PASS" => call!(command_pass) |
+        b"NICK" => call!(command_nick) |
+        b"USER" => call!(command_user) |
+        b"SERVER" => call!(command_server) |
+        b"OPER" => call!(command_oper) |
+        b"QUIT" => call!(command_quit) |
+        b"SQUIT" => call!(command_squit) |
+        b"JOIN" => call!(command_join) |
+        b"PART" => call!(command_part) |
+        b"MODE" => call!(command_mode) |
+        b"TOPIC" => call!(command_topic) |
+        b"NAMES" => call!(command_names) |
+        b"LIST" => call!(command_list) |
+        b"INVITE" => call!(command_invite) |
+        b"KICK" => call!(command_kick) |
+        b"VERSION" => call!(command_version) |
+        b"STATS" => call!(command_stats) |
+        b"LINKS" => call!(command_links) |
+        b"TIME" => call!(command_time) |
+        b"CONNECT" => call!(command_connect) |
+        b"TRACE" => call!(command_trace) |
+        b"ADMIN" => call!(command_admin) |
+        b"INFO" => call!(command_info) |
+        b"PRIVMSG" => call!(command_privmsg) |
+        b"NOTICE" => call!(command_notice) |
+        b"WHO" => call!(command_who) |
+        b"WHOIS" => call!(command_whois) |
+        b"WHOWAS" => call!(command_whowas) |
+        b"KILL" => call!(command_kill) |
+        b"PING" => call!(command_ping) |
+        b"PONG" => call!(command_pong) |
+        b"ERROR" => call!(command_error) |
+        b"AWAY" => call!(command_away) |
+        b"REHASH" => call!(command_rehash) |
+        b"RESTART" => call!(command_restart) |
+        b"SUMMON" => call!(command_summon) |
+        b"USERS" => call!(command_users) |
+        b"WALLOPS" => call!(command_wallops) |
+        b"USERHOST" => call!(command_userhost) |
+        b"ISON" => call!(command_ison)
     )
 );
-
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Message {
-    prefix: Option<Prefix>,
-    command: Command,
+    pub prefix: Option<Prefix>,
+    pub command: Command,
 }
 
 named!(
-    pub parse_message<&str, Message>,
+    pub parse_message<&[u8], Message>,
     do_parse!(
         prefix: opt!(do_parse!(prefix: prefix >> spaces >> (prefix))) >>
         command: command >>
-        tag!("\r\n") >>
+        tag!(b"\r\n") >>
         (Message { prefix: prefix, command: command })
     )
 );
-
 
 #[cfg(test)]
 mod tests {
@@ -730,209 +846,702 @@ mod tests {
 
     #[test]
     fn pass() {
-        assert_eq!(command_pass("PASS password\r\n"),
-                   Ok(("\r\n", Command::Pass { password: "password".into() })));
-        assert_eq!(command_pass("PASS :password\r\n"),
-                   Ok(("\r\n", Command::Pass { password: "password".into() })));
+        assert_eq!(
+            command_pass(b"PASS password\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Pass {
+                    password: "password".into()
+                }
+            ))
+        );
+        assert_eq!(
+            command_pass(b"PASS :password\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Pass {
+                    password: "password".into()
+                }
+            ))
+        );
 
-        assert_eq!(command_pass("PASS  password\r\n"),
-                   Ok(("\r\n", Command::Pass { password: "password".into() })));
-        assert_eq!(command_pass("PASS  :password\r\n"),
-                   Ok(("\r\n", Command::Pass { password: "password".into() })));
+        assert_eq!(
+            command_pass(b"PASS  password\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Pass {
+                    password: "password".into()
+                }
+            ))
+        );
+        assert_eq!(
+            command_pass(b"PASS  :password\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Pass {
+                    password: "password".into()
+                }
+            ))
+        );
     }
 
     #[test]
     fn nick() {
-        assert_eq!(command_nick("NICK nickname\r\n"),
-                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: None })));
-        assert_eq!(command_nick("NICK :nickname\r\n"),
-                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: None })));
+        assert_eq!(
+            command_nick(b"NICK nickname\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Nick {
+                    nickname: "nickname".into(),
+                    hopcount: None
+                }
+            ))
+        );
+        assert_eq!(
+            command_nick(b"NICK :nickname\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Nick {
+                    nickname: "nickname".into(),
+                    hopcount: None
+                }
+            ))
+        );
 
-        assert_eq!(command_nick("NICK  nickname  42\r\n"),
-                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: Some(42) })));
-        assert_eq!(command_nick("NICK nickname :42\r\n"),
-                   Ok(("\r\n", Command::Nick { nickname: "nickname".into(), hopcount: Some(42) })));
-
+        assert_eq!(
+            command_nick(b"NICK  nickname  42\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Nick {
+                    nickname: "nickname".into(),
+                    hopcount: Some(42)
+                }
+            ))
+        );
+        assert_eq!(
+            command_nick(b"NICK nickname :42\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Nick {
+                    nickname: "nickname".into(),
+                    hopcount: Some(42)
+                }
+            ))
+        );
     }
 
     #[test]
     fn user() {
-        assert_eq!(command_user("USER user host server real\r\n"),
-                   Ok(("\r\n", Command::User { username: "user".to_string(),
-                                               hostname: "host".to_string(),
-                                               servername: "server".to_string(),
-                                               realname: "real".to_string() })));
+        assert_eq!(
+            command_user(b"USER user host server real\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::User {
+                    username: "user".to_string(),
+                    hostname: "host".to_string(),
+                    servername: "server".to_string(),
+                    realname: "real".to_string()
+                }
+            ))
+        );
 
-        assert_eq!(command_user("USER user  host   server    :real name\r\n"),
-                   Ok(("\r\n", Command::User { username: "user".to_string(),
-                                               hostname: "host".to_string(),
-                                               servername: "server".to_string(),
-                                               realname: "real name".to_string() })));
+        assert_eq!(
+            command_user(b"USER user  host   server    :real name\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::User {
+                    username: "user".to_string(),
+                    hostname: "host".to_string(),
+                    servername: "server".to_string(),
+                    realname: "real name".to_string()
+                }
+            ))
+        );
     }
 
     #[test]
     fn server() {
-        assert_eq!(command_server("SERVER foo 5 something\r\n"),
-                   Ok(("\r\n", Command::Server { servername: "foo".to_string(),
-                                                 hopcount: 5,
-                                                 info: "something".to_string() })));
-        assert_eq!(command_server("SERVER foo    5  :this is some server!\r\n"),
-                   Ok(("\r\n", Command::Server { servername: "foo".to_string(),
-                                                 hopcount: 5,
-                                                 info: "this is some server!".to_string() })));
+        assert_eq!(
+            command_server(b"SERVER foo 5 something\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Server {
+                    servername: "foo".to_string(),
+                    hopcount: 5,
+                    info: "something".to_string()
+                }
+            ))
+        );
+        assert_eq!(
+            command_server(b"SERVER foo    5  :this is some server!\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Server {
+                    servername: "foo".to_string(),
+                    hopcount: 5,
+                    info: "this is some server!".to_string()
+                }
+            ))
+        );
     }
 
     #[test]
     fn oper() {
-        assert_eq!(command_oper("OPER user pass\r\n"),
-                   Ok(("\r\n", Command::Oper { user: "user".to_string(),
-                                               password: "pass".to_string() })));
-        assert_eq!(command_oper("OPER user  :pass\r\n"),
-                   Ok(("\r\n", Command::Oper { user: "user".to_string(),
-                                               password: "pass".to_string() })));
+        assert_eq!(
+            command_oper(b"OPER user pass\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Oper {
+                    user: "user".to_string(),
+                    password: "pass".to_string()
+                }
+            ))
+        );
+        assert_eq!(
+            command_oper(b"OPER user  :pass\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Oper {
+                    user: "user".to_string(),
+                    password: "pass".to_string()
+                }
+            ))
+        );
     }
 
     #[test]
     fn quit() {
-        assert_eq!(command_quit("QUIT\r\n"),
-                   Ok(("\r\n", Command::Quit { message: None })));
-        assert_eq!(command_quit("QUIT bye\r\n"),
-                   Ok(("\r\n", Command::Quit { message: Some("bye".to_string()) })));
-        assert_eq!(command_quit("QUIT  :good bye\r\n"),
-                   Ok(("\r\n", Command::Quit { message: Some("good bye".to_string()) })));
+        assert_eq!(
+            command_quit(b"QUIT\r\n"),
+            Ok((&b"\r\n"[..], Command::Quit { message: None }))
+        );
+        assert_eq!(
+            command_quit(b"QUIT bye\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Quit {
+                    message: Some("bye".to_string())
+                }
+            ))
+        );
+        assert_eq!(
+            command_quit(b"QUIT  :good bye\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Quit {
+                    message: Some("good bye".to_string())
+                }
+            ))
+        );
     }
 
     #[test]
     fn squit() {
-        assert_eq!(command_squit("SQUIT server comment\r\n"),
-                   Ok(("\r\n", Command::Squit { server: "server".to_string(),
-                                                comment: "comment".to_string() })));
-        assert_eq!(command_squit("SQUIT server  :comment\r\n"),
-                   Ok(("\r\n", Command::Squit { server: "server".to_string(),
-                                                comment: "comment".to_string() })));
+        assert_eq!(
+            command_squit(b"SQUIT server comment\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Squit {
+                    server: "server".to_string(),
+                    comment: "comment".to_string()
+                }
+            ))
+        );
+        assert_eq!(
+            command_squit(b"SQUIT server  :comment\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Squit {
+                    server: "server".to_string(),
+                    comment: "comment".to_string()
+                }
+            ))
+        );
     }
 
     #[test]
     fn join() {
-        assert_eq!(command_join("JOIN #foo\r\n"),
-                   Ok(("\r\n", Command::Join { channels: vec!["#foo".to_string()],
-                                               keys: vec![] })));
-        assert_eq!(command_join("JOIN #foo,#bar\r\n"),
-                   Ok(("\r\n", Command::Join { channels: vec!["#foo".to_string(),
-                                                              "#bar".to_string()],
-                                               keys: vec![] })));
-        assert_eq!(command_join("JOIN #foo,#bar  baz,quux\r\n"),
-                   Ok(("\r\n", Command::Join { channels: vec!["#foo".to_string(),
-                                                              "#bar".to_string()],
-                                               keys: vec!["baz".to_string(),
-                                                          "quux".to_string()] })));
+        assert_eq!(
+            command_join(b"JOIN #foo\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Join {
+                    channels: vec!["#foo".to_string()],
+                    keys: vec![],
+                }
+            ))
+        );
+        assert_eq!(
+            command_join(b"JOIN #foo,#bar\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Join {
+                    channels: vec!["#foo".to_string(), "#bar".to_string()],
+                    keys: vec![],
+                }
+            ))
+        );
+        assert_eq!(
+            command_join(b"JOIN #foo,#bar  baz,quux\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Join {
+                    channels: vec!["#foo".to_string(), "#bar".to_string()],
+                    keys: vec!["baz".to_string(), "quux".to_string()],
+                }
+            ))
+        );
     }
 
     #[test]
     fn part() {
-        assert_eq!(command_part("PART #foo\r\n"),
-                   Ok(("\r\n", Command::Part { channels: vec!["#foo".to_string()] })));
-        assert_eq!(command_part("PART  #foo,#bar\r\n"),
-                   Ok(("\r\n", Command::Part { channels: vec!["#foo".to_string(),
-                                                              "#bar".to_string()] })));
+        assert_eq!(
+            command_part(b"PART #foo\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Part {
+                    channels: vec!["#foo".to_string()],
+                }
+            ))
+        );
+        assert_eq!(
+            command_part(b"PART  #foo,#bar\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Part {
+                    channels: vec!["#foo".to_string(), "#bar".to_string()],
+                }
+            ))
+        );
     }
 
     #[test]
     fn mode() {
-        assert_eq!(command_mode("MODE #foo +b-q+l-i foo bar!*@* 42\r\n"),
-                   Ok(("\r\n", Command::Mode { target: "#foo".to_string(),
-                                               modechanges: Some(
-                                                   vec![ChannelModeChange::Added(ChannelMode::Ban("foo".to_string())),
-                                                        ChannelModeChange::Removed(ChannelMode::Quiet("bar!*@*".to_string())),
-                                                        ChannelModeChange::Added(ChannelMode::Limit(42)),
-                                                        ChannelModeChange::Removed(ChannelMode::InviteOnly)]) })));
+        assert_eq!(
+            command_mode(b"MODE #foo +b-q+l-i foo bar!*@* 42\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Mode {
+                    target: "#foo".to_string(),
+                    modechanges: Some(vec![
+                        ChannelModeChange::Added(ChannelMode::Ban("foo".to_string())),
+                        ChannelModeChange::Removed(ChannelMode::Quiet("bar!*@*".to_string())),
+                        ChannelModeChange::Added(ChannelMode::Limit(42)),
+                        ChannelModeChange::Removed(ChannelMode::InviteOnly),
+                    ]),
+                }
+            ))
+        );
     }
 
     #[test]
     fn topic() {
-        assert_eq!(command_topic("TOPIC #channel\r\n"),
-                   Ok(("\r\n", Command::Topic { channel: "#channel".to_string(),
-                                                topic: None })));
-        assert_eq!(command_topic("TOPIC #channel something\r\n"),
-                   Ok(("\r\n", Command::Topic { channel: "#channel".to_string(),
-                                                topic: Some("something".to_string()) })));
-        assert_eq!(command_topic("TOPIC #channel  :something else\r\n"),
-                   Ok(("\r\n", Command::Topic { channel: "#channel".to_string(),
-                                                topic: Some("something else".to_string()) })));
+        assert_eq!(
+            command_topic(b"TOPIC #channel\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Topic {
+                    channel: "#channel".to_string(),
+                    topic: None
+                }
+            ))
+        );
+        assert_eq!(
+            command_topic(b"TOPIC #channel something\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Topic {
+                    channel: "#channel".to_string(),
+                    topic: Some("something".to_string())
+                }
+            ))
+        );
+        assert_eq!(
+            command_topic(b"TOPIC #channel  :something else\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Topic {
+                    channel: "#channel".to_string(),
+                    topic: Some("something else".to_string())
+                }
+            ))
+        );
     }
+
+    #[test]
+    fn names() {
+        assert_eq!(
+            command_names(b"NAMES\r\n"),
+            Ok((&b"\r\n"[..], Command::Names { channels: vec![] }))
+        );
+        assert_eq!(
+            command_names(b"NAMES  :#foo,#bar\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Names {
+                    channels: vec!["#foo".to_string(), "#bar".to_string()],
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn list() {
+        assert_eq!(
+            command_list(b"LIST\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::List {
+                    channels: vec![],
+                    server: None,
+                }
+            ))
+        );
+        assert_eq!(
+            command_list(b"LIST #channel\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::List {
+                    channels: vec!["#channel".to_string()],
+                    server: None,
+                }
+            ))
+        );
+        assert_eq!(
+            command_list(b"LIST #channel  :irc.example.org\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::List {
+                    channels: vec!["#channel".to_string()],
+                    server: Some("irc.example.org".to_string()),
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn invite() {
+        assert_eq!(
+            command_invite(b"INVITE person #channel\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Invite {
+                    nickname: "person".to_string(),
+                    channel: "#channel".to_string()
+                }
+            ))
+        );
+        assert_eq!(
+            command_invite(b"INVITE person  :#channel\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Invite {
+                    nickname: "person".to_string(),
+                    channel: "#channel".to_string()
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn kick() {
+        assert_eq!(
+            command_kick(b"KICK #channel person\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Kick {
+                    channel: "#channel".to_string(),
+                    user: "person".to_string(),
+                    comment: None
+                }
+            ))
+        );
+        assert_eq!(
+            command_kick(b"KICK #channel person  :some message\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Kick {
+                    channel: "#channel".to_string(),
+                    user: "person".to_string(),
+                    comment: Some("some message".to_string())
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn version() {
+        assert_eq!(
+            command_version(b"VERSION\r\n"),
+            Ok((&b"\r\n"[..], Command::Version { server: None }))
+        );
+        assert_eq!(
+            command_version(b"VERSION irc.example.org\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Version {
+                    server: Some("irc.example.org".to_string())
+                }
+            ))
+        );
+        assert_eq!(
+            command_version(b"VERSION  :irc.example.org\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Version {
+                    server: Some("irc.example.org".to_string())
+                }
+            ))
+        );
+    }
+
+    // Stats { query: Option<String>, server: Option<String> },
+    #[test]
+    fn stats() {}
+
+    // Links { remote_server: Option<String>, server_mask: Option<String> },
+    #[test]
+    fn links() {}
+
+    // Time { server: Option<String> },
+    #[test]
+    fn time() {}
+
+    // Connect { target_server: String, port: Option<String>, remote_server: Option<String> },
+    #[test]
+    fn connect() {}
+
+    // Trace { server: Option<String> },
+    #[test]
+    fn trace() {}
+
+    // Admin { server: Option<String> },
+    #[test]
+    fn admin() {}
+
+    // Info { server: Option<String> },
+    #[test]
+    fn info() {}
+
+    // Privmsg { receivers: Vec<String>, message: String },
+    #[test]
+    fn privmsg() {}
+
+    // Notice { nickname: String, text: String },
+    #[test]
+    fn notice() {}
+
+    // Who { name: Option<String>, o: Option<String> },
+    #[test]
+    fn who() {}
+
+    // Whois { server: Option<String>, nickmasks: Vec<String> },
+    #[test]
+    fn whois() {}
+
+    // Whowas { nickname: String, count: Option<String>, server: Option<String> },
+    #[test]
+    fn whowas() {}
+
+    // Kill { nickname: String, comment: String },
+    #[test]
+    fn kill() {}
+
+    // Ping { server1: String, server2: Option<String> },
+    #[test]
+    fn ping() {}
+
+    // Pong { daemon1: String, daemon2: Option<String> },
+    #[test]
+    fn pong() {}
+
+    // Error { message: String },
+    #[test]
+    fn error() {}
+
+    // Away { message: Option<String> },
+    #[test]
+    fn away() {}
+
+    // Rehash,
+    #[test]
+    fn rehash() {}
+
+    // Restart,
+    #[test]
+    fn restart() {}
+
+    // Summon { user: String, server: Option<String> },
+    #[test]
+    fn summon() {}
+
+    // Users { server: Option<String> },
+    #[test]
+    fn users() {}
+
+    // Wallops { text: String },
+    #[test]
+    fn wallops() {}
+
+    // Userhost { nicknames: Vec<String> },
+    #[test]
+    fn userhost() {}
+
+    // Ison { nicknames: Vec<String> },
+    #[test]
+    fn ison() {}
 
     #[test]
     fn test_prefix() {
         assert_eq!(
-            prefix(":foo.bar PRIVMSG #baz :quux"),
-            Ok((" PRIVMSG #baz :quux", Prefix("foo.bar".to_string())))
+            prefix(b":foo.bar PRIVMSG #baz :quux"),
+            Ok((&b" PRIVMSG #baz :quux"[..], Prefix("foo.bar".to_string())))
         );
     }
 
     #[test]
     fn test_argument_middle() {
         assert_eq!(
-            argument_middle("foo :baz"),
-            Ok((" :baz", "foo"))
+            argument_middle(b"foo :baz"),
+            Ok((&b" :baz"[..], "foo".to_owned()))
         );
     }
 
     #[test]
     fn test_argument_middle_initial_colon_not_allowed() {
         assert_eq!(
-            argument_middle(":foo baz"),
-            Err(nom::Err::Error(nom::Context::Code(":foo baz", nom::ErrorKind::Verify)))
+            argument_middle(b":foo baz"),
+            Err(nom::Err::Error(nom::Context::Code(
+                &b":foo baz"[..],
+                nom::ErrorKind::Verify
+            )))
         );
     }
 
     #[test]
     fn test_argument_trailing() {
         assert_eq!(
-            argument_trailing(":foo bar baz\r\n"),
-            Ok(("\r\n", "foo bar baz"))
+            argument_trailing(b":foo bar baz\r\n"),
+            Ok((&b"\r\n"[..], "foo bar baz".to_owned()))
         );
     }
 
     #[test]
     fn test_argument_trailing_empty() {
         assert_eq!(
-            argument_trailing(":\r\n"),
-            Ok(("\r\n", ""))
+            argument_trailing(b":\r\n"),
+            Ok((&b"\r\n"[..], "".to_owned()))
         );
     }
 
     #[test]
     fn test_command_privmsg() {
         assert_eq!(
-            command_privmsg("PRIVMSG #foo,#bar baz\r\n"),
-            Ok(("\r\n", Command::Privmsg { receivers: vec!["#foo".to_string() ,"#bar".to_string()], message: "baz".to_string() }))
+            command_privmsg(b"PRIVMSG #foo,#bar baz\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Privmsg {
+                    receivers: vec!["#foo".to_string(), "#bar".to_string()],
+                    message: "baz".to_string(),
+                }
+            ))
         );
 
         assert_eq!(
-            command_privmsg("PRIVMSG #foo,#bar :baz quux\r\n"),
-            Ok(("\r\n", Command::Privmsg { receivers: vec!["#foo".to_string(), "#bar".to_string()], message: "baz quux".to_string() }))
+            command_privmsg(b"PRIVMSG #foo,#bar :baz quux\r\n"),
+            Ok((
+                &b"\r\n"[..],
+                Command::Privmsg {
+                    receivers: vec!["#foo".to_string(), "#bar".to_string()],
+                    message: "baz quux".to_string(),
+                }
+            ))
         );
     }
 
     #[test]
     fn test_message() {
         assert_eq!(
-            parse_message(":irc.example.org PRIVMSG #foo :bar baz\r\n"),
-            Ok(("", Message { prefix: Some(Prefix("irc.example.org".to_string())), command: Command::Privmsg { receivers: vec!["#foo".into()], message: "bar baz".into() }}))
+            parse_message(b":irc.example.org PRIVMSG #foo :bar baz\r\n"),
+            Ok((
+                &b""[..],
+                Message {
+                    prefix: Some(Prefix("irc.example.org".to_string())),
+                    command: Command::Privmsg {
+                        receivers: vec!["#foo".into()],
+                        message: "bar baz".into(),
+                    },
+                }
+            ))
         );
     }
 
     #[test]
     fn test_whois() {
-        assert_eq!(parse_message("WHO kyrias\r\n"),
-                   Ok(("", Message { prefix: None, command: Command::Who { name: None, o: Some("kyrias".into()) }})));
-        assert_eq!(parse_message("WHO kyrias foo\r\n"),
-                   Ok(("", Message { prefix: None, command: Command::Who { name: Some("kyrias".into()), o: Some("foo".into()) }})));
-        assert_eq!(parse_message("WHOIS kyrias\r\n"),
-                   Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into()] }})));
-        assert_eq!(parse_message("WHOIS kyrias,demize\r\n"),
-                   Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into(), "demize".into()] }})));
-        assert_eq!(parse_message("WHOIS chat.freenode.net kyrias,demize\r\n"),
-                   Ok(("", Message { prefix: None, command: Command::Whois { server: Some("chat.freenode.net".into()), nickmasks: vec!["kyrias".into(), "demize".into()] }})));
+        assert_eq!(
+            parse_message(b"WHO kyrias\r\n"),
+            Ok((
+                &b""[..],
+                Message {
+                    prefix: None,
+                    command: Command::Who {
+                        name: None,
+                        o: Some("kyrias".into())
+                    }
+                }
+            ))
+        );
+        assert_eq!(
+            parse_message(b"WHO kyrias foo\r\n"),
+            Ok((
+                &b""[..],
+                Message {
+                    prefix: None,
+                    command: Command::Who {
+                        name: Some("kyrias".into()),
+                        o: Some("foo".into())
+                    }
+                }
+            ))
+        );
+        assert_eq!(
+            parse_message(b"WHOIS kyrias\r\n"),
+            Ok((
+                &b""[..],
+                Message {
+                    prefix: None,
+                    command: Command::Whois {
+                        server: None,
+                        nickmasks: vec!["kyrias".into()],
+                    },
+                }
+            ))
+        );
+        assert_eq!(
+            parse_message(b"WHOIS kyrias,demize\r\n"),
+            Ok((
+                &b""[..],
+                Message {
+                    prefix: None,
+                    command: Command::Whois {
+                        server: None,
+                        nickmasks: vec!["kyrias".into(), "demize".into()],
+                    },
+                }
+            ))
+        );
+        assert_eq!(
+            parse_message(b"WHOIS chat.freenode.net kyrias,demize\r\n"),
+            Ok((
+                &b""[..],
+                Message {
+                    prefix: None,
+                    command: Command::Whois {
+                        server: Some("chat.freenode.net".into()),
+                        nickmasks: vec!["kyrias".into(), "demize".into()],
+                    },
+                }
+            ))
+        );
     }
 }
