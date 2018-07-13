@@ -714,7 +714,7 @@ pub struct Message {
 }
 
 named!(
-    pub message<&str, Message>,
+    pub parse_message<&str, Message>,
     do_parse!(
         prefix: opt!(do_parse!(prefix: prefix >> spaces >> (prefix))) >>
         command: command >>
@@ -916,24 +916,23 @@ mod tests {
 
     #[test]
     fn test_message() {
-        println!("{:?}", message(":irc.example.org PRIVMSG #foo :bar baz\r\n"));
         assert_eq!(
-            message(":irc.example.org PRIVMSG #foo :bar baz\r\n"),
+            parse_message(":irc.example.org PRIVMSG #foo :bar baz\r\n"),
             Ok(("", Message { prefix: Some(Prefix("irc.example.org".to_string())), command: Command::Privmsg { receivers: vec!["#foo".into()], message: "bar baz".into() }}))
         );
     }
 
     #[test]
     fn test_whois() {
-        assert_eq!(message("WHO kyrias\r\n"),
+        assert_eq!(parse_message("WHO kyrias\r\n"),
                    Ok(("", Message { prefix: None, command: Command::Who { name: None, o: Some("kyrias".into()) }})));
-        assert_eq!(message("WHO kyrias foo\r\n"),
+        assert_eq!(parse_message("WHO kyrias foo\r\n"),
                    Ok(("", Message { prefix: None, command: Command::Who { name: Some("kyrias".into()), o: Some("foo".into()) }})));
-        assert_eq!(message("WHOIS kyrias\r\n"),
+        assert_eq!(parse_message("WHOIS kyrias\r\n"),
                    Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into()] }})));
-        assert_eq!(message("WHOIS kyrias,demize\r\n"),
+        assert_eq!(parse_message("WHOIS kyrias,demize\r\n"),
                    Ok(("", Message { prefix: None, command: Command::Whois { server: None, nickmasks: vec!["kyrias".into(), "demize".into()] }})));
-        assert_eq!(message("WHOIS chat.freenode.net kyrias,demize\r\n"),
+        assert_eq!(parse_message("WHOIS chat.freenode.net kyrias,demize\r\n"),
                    Ok(("", Message { prefix: None, command: Command::Whois { server: Some("chat.freenode.net".into()), nickmasks: vec!["kyrias".into(), "demize".into()] }})));
     }
 }
