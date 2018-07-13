@@ -1,6 +1,11 @@
 #[macro_use]
 extern crate nom;
 
+mod modes;
+
+pub use modes::{ChannelMode, ChannelModeChange};
+use modes::channel_modes;
+
 
 trait SplitToVec {
     fn split_to_vec(&self, pattern: &str) -> Vec<String>;
@@ -108,7 +113,7 @@ pub enum Command {
     Squit { server: String, comment: String },
     Join { channels: Vec<String>, keys: Vec<String> },
     Part { channels: Vec<String> },
-    Mode { target: String, modes: String, limit: Option<String>, user: Option<String>, banmask: Option<String> },
+    Mode { target: String, modechanges: Option<Vec<ChannelModeChange>> },
     Topic { channel: String, topic: Option<String> },
     Names { channels: Vec<String> },
     List { channels: Vec<String>, server: Option<String> },
@@ -253,28 +258,24 @@ named!(
     )
 );
 
-// TODO: This doesn't actually parse them properly, since the order in practice depends on the
-// order of the modes.  https://tools.ietf.org/html/rfc2812#section-3.2.3
-// I'm really not sure how to parse this properly.
+
+named!(channel_mode<&str, Command>,
+    do_parse!(
+        target: argument_maybe_last >>
+        spaces >>
+        modechanges: opt!(channel_modes) >>
+        (Command::Mode { target: target.to_string(),
+                         modechanges: modechanges })
+    )
+);
+
 named!(
     command_mode<&str, Command>,
     do_parse!(
         tag!("MODE") >>
         spaces >>
-        target: argument_middle >>
-        spaces >>
-        modes: argument_middle >>
-        opt!(spaces) >>
-        limit: opt!(argument_maybe_last) >>
-        opt!(spaces) >>
-        user: opt!(argument_maybe_last) >>
-        opt!(spaces) >>
-        banmask: opt!(argument_maybe_last) >>
-        (Command::Mode { target: target.to_string(),
-                         modes: modes.to_string(),
-                         limit: limit.map(|l| l.to_string()),
-                         user: user.map(|u| u.to_string()),
-                         banmask: banmask.map(|b| b.to_string()) })
+        modes: channel_mode >>
+        (modes)
     )
 );
 
@@ -834,6 +835,17 @@ mod tests {
         assert_eq!(command_part("PART  #foo,#bar\r\n"),
                    Ok(("\r\n", Command::Part { channels: vec!["#foo".to_string(),
                                                               "#bar".to_string()] })));
+    }
+
+    #[test]
+    fn mode() {
+        assert_eq!(command_mode("MODE #foo +b-q+l-i foo bar!*@* 42\r\n"),
+                   Ok(("\r\n", Command::Mode { target: "#foo".to_string(),
+                                               modechanges: Some(
+                                                   vec![ChannelModeChange::Added(ChannelMode::Ban("foo".to_string())),
+                                                        ChannelModeChange::Removed(ChannelMode::Quiet("bar!*@*".to_string())),
+                                                        ChannelModeChange::Added(ChannelMode::Limit(42)),
+                                                        ChannelModeChange::Removed(ChannelMode::InviteOnly)]) })));
     }
 
     #[test]
