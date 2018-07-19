@@ -580,6 +580,7 @@ named!(
     command_notice<&[u8], Command>,
     do_parse!(
         tag!(b"NOTICE") >>
+        spaces >>
         nickname: argument_middle >>
         spaces >>
         text: argument_maybe_last >>
