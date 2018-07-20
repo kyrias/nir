@@ -2,9 +2,11 @@
 extern crate nom;
 
 mod modes;
+mod serialize;
 
 use modes::channel_modes;
 pub use modes::{AddedChannelMode, ChannelModeChange, RemovedChannelMode};
+pub use serialize::Serialize;
 
 trait SplitToVec {
     type Pattern;
