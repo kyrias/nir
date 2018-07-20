@@ -105,7 +105,7 @@ impl ValueLessChannelModeChange {
 ///
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum ChannelMode {
+pub enum AddedChannelMode {
     Op(String),
     Voice(String),
 
@@ -125,8 +125,11 @@ pub enum ChannelMode {
     InviteException(String),
 }
 
-impl ChannelMode {
-    fn from_valueless(input: &[u8], vlm: ValueLessChannelMode) -> nom::IResult<&[u8], ChannelMode> {
+impl AddedChannelMode {
+    fn from_valueless(
+        input: &[u8],
+        vlm: ValueLessChannelMode,
+    ) -> nom::IResult<&[u8], AddedChannelMode> {
         named!(mode_argument<&[u8], String>,
            do_parse!(
                tag!(" ") >>
@@ -138,47 +141,127 @@ impl ChannelMode {
         match vlm {
             ValueLessChannelMode::Op => {
                 let (remaining, arg) = mode_argument(input)?;
-                Ok((remaining, ChannelMode::Op(arg.to_string())))
+                Ok((remaining, AddedChannelMode::Op(arg.to_string())))
             }
             ValueLessChannelMode::Voice => {
                 let (remaining, arg) = mode_argument(input)?;
-                Ok((remaining, ChannelMode::Voice(arg.to_string())))
+                Ok((remaining, AddedChannelMode::Voice(arg.to_string())))
             }
 
-            ValueLessChannelMode::InviteOnly => Ok((input, ChannelMode::InviteOnly)),
-            ValueLessChannelMode::Moderated => Ok((input, ChannelMode::Moderated)),
-            ValueLessChannelMode::NoExternal => Ok((input, ChannelMode::NoExternal)),
+            ValueLessChannelMode::InviteOnly => Ok((input, AddedChannelMode::InviteOnly)),
+            ValueLessChannelMode::Moderated => Ok((input, AddedChannelMode::Moderated)),
+            ValueLessChannelMode::NoExternal => Ok((input, AddedChannelMode::NoExternal)),
             ValueLessChannelMode::Quiet => {
                 let (remaining, arg) = mode_argument(input)?;
-                Ok((remaining, ChannelMode::Quiet(arg.to_string())))
+                Ok((remaining, AddedChannelMode::Quiet(arg.to_string())))
             }
-            ValueLessChannelMode::Private => Ok((input, ChannelMode::Private)),
-            ValueLessChannelMode::Secret => Ok((input, ChannelMode::Secret)),
-            ValueLessChannelMode::OpsTopic => Ok((input, ChannelMode::OpsTopic)),
+            ValueLessChannelMode::Private => Ok((input, AddedChannelMode::Private)),
+            ValueLessChannelMode::Secret => Ok((input, AddedChannelMode::Secret)),
+            ValueLessChannelMode::OpsTopic => Ok((input, AddedChannelMode::OpsTopic)),
 
             ValueLessChannelMode::Key => {
                 let (remaining, arg) = mode_argument(input)?;
-                Ok((remaining, ChannelMode::Key(arg.to_string())))
+                Ok((remaining, AddedChannelMode::Key(arg.to_string())))
             }
             ValueLessChannelMode::Limit => {
                 let (remaining, arg) = mode_argument(input)?;
                 Ok((
                     remaining,
-                    ChannelMode::Limit(u64::from_str_radix(&arg, 10).expect("user limit")),
+                    AddedChannelMode::Limit(u64::from_str_radix(&arg, 10).expect("user limit")),
                 ))
             }
 
             ValueLessChannelMode::Ban => {
                 let (remaining, arg) = mode_argument(input)?;
-                Ok((remaining, ChannelMode::Ban(arg.to_string())))
+                Ok((remaining, AddedChannelMode::Ban(arg.to_string())))
             }
             ValueLessChannelMode::BanException => {
                 let (remaining, arg) = mode_argument(input)?;
-                Ok((remaining, ChannelMode::BanException(arg.to_string())))
+                Ok((remaining, AddedChannelMode::BanException(arg.to_string())))
             }
             ValueLessChannelMode::InviteException => {
                 let (remaining, arg) = mode_argument(input)?;
-                Ok((remaining, ChannelMode::InviteException(arg.to_string())))
+                Ok((
+                    remaining,
+                    AddedChannelMode::InviteException(arg.to_string()),
+                ))
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum RemovedChannelMode {
+    Op(String),
+    Voice(String),
+
+    InviteOnly,
+    Moderated,
+    NoExternal,
+    Quiet(String),
+    Private,
+    Secret,
+    OpsTopic,
+
+    Key,
+    Limit,
+
+    Ban(String),
+    BanException(String),
+    InviteException(String),
+}
+
+impl RemovedChannelMode {
+    fn from_valueless(
+        input: &[u8],
+        vlm: ValueLessChannelMode,
+    ) -> nom::IResult<&[u8], RemovedChannelMode> {
+        named!(mode_argument<&[u8], String>,
+           do_parse!(
+               tag!(" ") >>
+               arg: argument_maybe_last >>
+               (arg)
+           )
+        );
+
+        match vlm {
+            ValueLessChannelMode::Op => {
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, RemovedChannelMode::Op(arg.to_string())))
+            }
+            ValueLessChannelMode::Voice => {
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, RemovedChannelMode::Voice(arg.to_string())))
+            }
+
+            ValueLessChannelMode::InviteOnly => Ok((input, RemovedChannelMode::InviteOnly)),
+            ValueLessChannelMode::Moderated => Ok((input, RemovedChannelMode::Moderated)),
+            ValueLessChannelMode::NoExternal => Ok((input, RemovedChannelMode::NoExternal)),
+            ValueLessChannelMode::Quiet => {
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, RemovedChannelMode::Quiet(arg.to_string())))
+            }
+            ValueLessChannelMode::Private => Ok((input, RemovedChannelMode::Private)),
+            ValueLessChannelMode::Secret => Ok((input, RemovedChannelMode::Secret)),
+            ValueLessChannelMode::OpsTopic => Ok((input, RemovedChannelMode::OpsTopic)),
+
+            ValueLessChannelMode::Key => Ok((input, RemovedChannelMode::Key)),
+            ValueLessChannelMode::Limit => Ok((input, RemovedChannelMode::Limit)),
+
+            ValueLessChannelMode::Ban => {
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, RemovedChannelMode::Ban(arg.to_string())))
+            }
+            ValueLessChannelMode::BanException => {
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((remaining, RemovedChannelMode::BanException(arg.to_string())))
+            }
+            ValueLessChannelMode::InviteException => {
+                let (remaining, arg) = mode_argument(input)?;
+                Ok((
+                    remaining,
+                    RemovedChannelMode::InviteException(arg.to_string()),
+                ))
             }
         }
     }
@@ -186,8 +269,8 @@ impl ChannelMode {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum ChannelModeChange {
-    Added(ChannelMode),
-    Removed(ChannelMode),
+    Added(AddedChannelMode),
+    Removed(RemovedChannelMode),
 }
 
 impl ChannelModeChange {
@@ -197,11 +280,11 @@ impl ChannelModeChange {
     ) -> nom::IResult<&[u8], ChannelModeChange> {
         match mcp {
             ValueLessChannelModeChange::Added(mp) => {
-                let (remaining, m) = ChannelMode::from_valueless(input, mp)?;
+                let (remaining, m) = AddedChannelMode::from_valueless(input, mp)?;
                 Ok((remaining, ChannelModeChange::Added(m)))
             }
             ValueLessChannelModeChange::Removed(mp) => {
-                let (remaining, m) = ChannelMode::from_valueless(input, mp)?;
+                let (remaining, m) = RemovedChannelMode::from_valueless(input, mp)?;
                 Ok((remaining, ChannelModeChange::Removed(m)))
             }
         }

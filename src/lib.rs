@@ -4,7 +4,7 @@ extern crate nom;
 mod modes;
 
 use modes::channel_modes;
-pub use modes::{ChannelMode, ChannelModeChange};
+pub use modes::{AddedChannelMode, ChannelModeChange, RemovedChannelMode};
 
 trait SplitToVec {
     type Pattern;
@@ -1118,20 +1118,20 @@ mod tests {
 
     #[test]
     fn mode() {
+        let command = b"MODE #foo +b-q+l-i foo bar!*@* 42\r\n";
+        let expected = Command::Mode {
+            target: "#foo".to_string(),
+            modechanges: Some(vec![
+                ChannelModeChange::Added(AddedChannelMode::Ban("foo".to_string())),
+                ChannelModeChange::Removed(RemovedChannelMode::Quiet("bar!*@*".to_string())),
+                ChannelModeChange::Added(AddedChannelMode::Limit(42)),
+                ChannelModeChange::Removed(RemovedChannelMode::InviteOnly),
+            ]),
+        };
+
         assert_eq!(
-            command_mode(b"MODE #foo +b-q+l-i foo bar!*@* 42\r\n"),
-            Ok((
-                &b"\r\n"[..],
-                Command::Mode {
-                    target: "#foo".to_string(),
-                    modechanges: Some(vec![
-                        ChannelModeChange::Added(ChannelMode::Ban("foo".to_string())),
-                        ChannelModeChange::Removed(ChannelMode::Quiet("bar!*@*".to_string())),
-                        ChannelModeChange::Added(ChannelMode::Limit(42)),
-                        ChannelModeChange::Removed(ChannelMode::InviteOnly),
-                    ]),
-                }
-            ))
+            command_mode(&command[..]),
+            Ok((&b"\r\n"[..], expected))
         );
     }
 
